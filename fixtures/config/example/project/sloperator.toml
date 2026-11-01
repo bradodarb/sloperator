@@ -1,0 +1,35 @@
+# sloperator.toml: every key (snake_case, D-9) — the SPEC §13 example, verbatim.
+extend = "../sloperator.toml"          # optional; relative to this file; may chain; a cycle is an error
+select = ["SLP001", "SLP003"]          # replaces the default set
+extend_select = ["SLP005"]
+ignore = ["SLP002"]
+min_severity = "warning"               # suggestion | warning | error
+include = ["**/*.md", "**/*.txt"]      # walker filter (default: *.md, *.markdown, *.txt)
+exclude = ["CHANGELOG.md", "vendor/**"]
+respect_gitignore = true
+
+[rules.SLP014]
+severity = "error"
+max_per_1000_words = 5.0               # parameter names and defaults come from RuleMeta::params
+
+[[per_file]]
+glob = "docs/legal/**"
+ignore = ["SLP008"]
+min_severity = "error"
+
+[protect]
+patterns = ['\bv\d+\.\d+\.\d+\b']      # regexes that extend the protected set (FR-7.4)
+terms = ["Acme Cloud", "Dr. Okafor"]   # literals that must survive unchanged; verify counts them (FR-8.5)
+front_matter = true
+math = true
+html = true
+
+[model]
+name = "qwen3-4b"                      # registry name (§15)
+path = "/models/my.gguf"               # optional local GGUF instead of the cache; requires `profile`
+profile = "qwen3"
+cache_dir = "~/.cache/sloperator/models"
+window = "paragraph"                   # paragraph | sentence
+max_window_chars = 4000                # longer windows are skipped with SLP902 (DQ-5)
+max_tokens = 0                         # 0 = 1.5 × the window's token estimate (architecture §8)
+seed = 42

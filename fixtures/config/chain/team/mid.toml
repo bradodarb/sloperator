@@ -1,0 +1,2 @@
+extend = "../root.toml"
+extend_select = ["SLP014"]

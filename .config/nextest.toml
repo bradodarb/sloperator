@@ -1,0 +1,21 @@
+# .config/nextest.toml — test profiles and JUnit reports under target/nextest/<profile>/junit.xml (ADR-07)
+[profile.ci]
+fail-fast = false
+[profile.ci.junit]
+path = "junit.xml"
+report-name = "sloperator"
+
+[profile.ci-perf]                  # NFR-3 benchmark, run with --cargo-profile release (§3)
+fail-fast = false
+test-threads = 1
+[profile.ci-perf.junit]
+path = "junit.xml"
+report-name = "sloperator-perf"
+
+[profile.it]                       # real model: one test at a time (memory)
+fail-fast = false
+test-threads = 1
+slow-timeout = { period = "120s", terminate-after = 10 }
+[profile.it.junit]
+path = "junit.xml"
+report-name = "sloperator-integration"

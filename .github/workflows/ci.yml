@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  ci:
+    # macOS matches the development machine: llama.cpp builds with Metal behind the default `model` feature.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # rustup reads rust-toolchain.toml (channel, rustfmt, clippy) and installs it on first use.
+      - name: Install toolchain from rust-toolchain.toml
+        run: |
+          channel=$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)
+          rustup toolchain install "$channel" --profile minimal --component rustfmt --component clippy
+          rustc --version
+          cargo --version
+
+      - name: Install cargo-nextest and cargo-deny
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest@0.9.150,cargo-deny@0.20.2
+
+      - name: Install cmake
+        run: command -v cmake || brew install cmake
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: make check
+        run: make check
+
+      - name: make build
+        run: make build
+
+      # Unit tier and perf test only: the integration tier needs the 2.5 GB model.
+      - name: make test
+        run: make test

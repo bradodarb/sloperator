@@ -1,0 +1,1 @@
+The tool is fast, simple, and reliable. We tested it on Linux, macOS, and Windows. Users want speed, safety, and clarity. The team ships docs, tests, and code. Each release adds fixes, features, and polish.
