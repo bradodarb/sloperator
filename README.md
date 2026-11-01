@@ -6,6 +6,9 @@
 Lint and rewrite LLM-generated prose so it reads as human-written. One crate: library `sloperator` and binary
 `sloperator`.
 
+It also runs as an MCP server (`sloperator mcp`), so agents can lint and fix text through the same pipeline; see
+[MCP server](#mcp-server).
+
 ## Usage
 
 ```text
@@ -15,6 +18,7 @@ sloperator [-v|-q] check [PATHS...] [--fix | --diff] [--rules-only | --model-onl
 sloperator rules [CODE]
 sloperator config [PATH] [--config FILE]
 sloperator model pull [NAME] | list | path [NAME]
+sloperator [-v] mcp [--rules-only] [--idle-unload SECS]
 ```
 
 **Commands.**
@@ -60,6 +64,40 @@ and 0 when none was (FR-2.7, FR-2.8, D-8). An error on one path does not stop th
 SLP001]`. No codes means every rule. See Rule core below.
 
 **Config reference:** see Configuration below (`sloperator.toml`, discovered upward from each file).
+
+## MCP server
+
+`sloperator mcp` runs an MCP server on stdio, so agents and editors can lint and fix text with the same pipeline as
+`sloperator check`. It is part of the normal binary, behind the default `mcp` cargo feature (ADR-10).
+
+| Tool | What it does |
+|------|--------------|
+| `lint` | Reports the findings and the score for `text`. |
+| `fix` | Returns the fixed text, a unified `diff`, the remaining findings and any rejections; `rules_only` skips the model. |
+| `rules` | Lists every rule: code, name, severity, on/off by default, fix class. |
+| `explain_rule` | Explains one rule `code`, with its parameters and a before/after example. |
+
+**It never writes files.** Text goes in and text comes out. A `path` argument is only a hint: it picks the format
+and which `sloperator.toml` applies, and the file is never read. `fix` returns a diff for the user to review before
+the agent applies anything.
+
+Client config (Claude Desktop / Claude Code, `mcpServers` in the client's JSON config):
+
+```json
+{"mcpServers": {"sloperator": {"command": "sloperator", "args": ["mcp"]}}}
+```
+
+Start it with the working directory set to the project, so relative `path` hints find its `sloperator.toml`.
+
+**Flags.**
+
+- `--rules-only`: never load the model; every `fix` uses the rules engine only.
+- `--idle-unload <secs>`: unload the model after this many seconds without a model-backed fix (default 600, `0` =
+  never). The model loads on the first `fix` that needs it; `lint`, `rules` and `explain_rule` never load it.
+- `-v`: model load/unload notes and llama.cpp logs on stderr. stdout carries only the protocol.
+
+A missing model is a tool error naming `sloperator model pull`; the server never downloads anything. The full guide,
+with example requests and responses, is [docs/MCP.md](docs/MCP.md).
 
 ## Document model (`doc`, `types`)
 
@@ -444,14 +482,6 @@ there. NAME defaults to the configured `model.name`. The registry:
 
 Weights are never committed or embedded: `tests/model_cache.rs::no_weights_in_crate` fails on any `*.gguf` file or any
 file over 10 MB in the repository (FR-9.10).
-
-## MCP server
-
-`sloperator mcp` runs an MCP server on stdio with four tools: `lint`, `fix`, `rules` and `explain_rule`. It takes
-text and returns text and never writes files. The model loads on the first model-backed fix and unloads after
-`--idle-unload` seconds (default 600); `--rules-only` never loads it. To use it from an MCP client, add
-`{"command": "sloperator", "args": ["mcp"]}`. See [docs/MCP.md](docs/MCP.md) and ADR-10. It is behind the default
-`mcp` feature.
 
 ## Development
 
