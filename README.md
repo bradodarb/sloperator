@@ -1,3 +1,5 @@
+<img width="1254" height="1254" alt="image" src="https://github.com/user-attachments/assets/258e3c35-6499-4a7f-9a29-97b1bb3ed418" />
+
 # sloperator
 
 Lint and rewrite LLM-generated prose so it reads as human-written. One crate: library `sloperator` and binary
