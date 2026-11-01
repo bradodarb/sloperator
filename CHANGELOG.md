@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- **MCP server:** `sloperator mcp` serves `lint`, `fix`, `rules` and `explain_rule` over stdio, behind the default
+  `mcp` feature (ADR-10, docs/MCP.md). Text in, text out: it never writes files. The model loads lazily, is used
+  serially and unloads after `--idle-unload` seconds (default 600; 0 = never). `--rules-only` turns it off.
+- `main` passes unlocked stdio handles to `cli::run`.
+- `make test` builds with `--features mcp`, so the unit tier covers the server.
+
 ## 0.1.0 (2026-11-01)
 
 First release, delivering epics 01-09. The plan and acceptance audits are in `docs/plan/`.

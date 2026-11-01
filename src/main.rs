@@ -15,13 +15,7 @@ fn main() {
         }
     };
     // The runtime is compiled only with the `model` feature; other builds use the model-less factory (ADR-02).
-    #[cfg(feature = "model")]
-    let factory: Box<dyn sloperator::engine::RewriterFactory> = Box::new(
-        sloperator::engine::runtime::RuntimeFactory::new(cli.verbose > 0),
-    );
-    #[cfg(not(feature = "model"))]
-    let factory: Box<dyn sloperator::engine::RewriterFactory> =
-        Box::new(sloperator::engine::DisabledFactory);
+    let factory = sloperator::engine::default_factory(cli.verbose > 0);
     let cwd = match std::env::current_dir() {
         Ok(d) => d,
         Err(e) => {
@@ -36,12 +30,14 @@ fn main() {
         cwd,
         color,
     };
+    // Unlocked handles: `mcp` reads stdin and writes stdout from the async runtime's own threads, which would block
+    // forever on a lock held here for the whole run.
     let code = cli::run(
         cli,
         &mut deps,
-        &mut std::io::stdin().lock(),
-        &mut std::io::stdout().lock(),
-        &mut std::io::stderr().lock(),
+        &mut std::io::stdin(),
+        &mut std::io::stdout(),
+        &mut std::io::stderr(),
     );
     std::process::exit(code as i32);
 }

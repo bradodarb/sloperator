@@ -81,6 +81,17 @@ const FORBIDDEN_USES: &[(&str, &[&str])] = &[
         "src/cli/",
         &["crate::engine::runtime", "llama_cpp_2", "mistralrs"],
     ),
+    // ADR-10: a thin adapter over pipeline/report/rules and the engine port. Text in, text out: no `write`.
+    (
+        "src/mcp/",
+        &[
+            "crate::write",
+            "crate::cli",
+            "crate::engine::runtime",
+            "llama_cpp_2",
+            "mistralrs",
+        ],
+    ),
 ];
 const PURE_DIRS: &[&str] = &[
     "src/doc/",
@@ -203,6 +214,11 @@ fn runtime_crate_only_in_adapter() {
 #[test]
 fn network_only_in_pull() {
     only_in(&["ureq"], "src/model/pull.rs");
+}
+
+#[test]
+fn mcp_sdk_only_in_server() {
+    only_in(&["rmcp"], "src/mcp/mod.rs");
 }
 
 #[test]

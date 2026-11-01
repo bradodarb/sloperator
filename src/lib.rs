@@ -10,6 +10,8 @@ pub mod edit;
 pub mod engine;
 pub mod error;
 pub mod input;
+#[cfg(feature = "mcp")]
+pub mod mcp;
 pub mod model;
 pub mod pipeline;
 pub mod report;
