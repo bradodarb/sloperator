@@ -37,10 +37,19 @@ jobs:
       - name: Install cmake
         run: command -v cmake || brew install cmake
 
+      # The Makefile needs GNU make 3.82+ (.ONESHELL); the runner's /usr/bin/make is 3.81. Put Homebrew's GNU make first
+      # on PATH as `make`.
+      - name: Install GNU make
+        run: |
+          brew list make >/dev/null 2>&1 || brew install make
+          echo "$(brew --prefix make)/libexec/gnubin" >> "$GITHUB_PATH"
+
       - uses: Swatinem/rust-cache@v2
 
       - name: make check
-        run: make check
+        run: |
+          make --version | head -n 1
+          make check
 
       - name: make build
         run: make build

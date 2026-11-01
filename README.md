@@ -446,6 +446,7 @@ file over 10 MB in the repository (FR-9.10).
 
 Prerequisites:
 
+- GNU make 3.82 or newer (the `Makefile` uses `.ONESHELL`); macOS ships 3.81, so `brew install make` and run `gmake`
 - Rust from `rustup`; `rust-toolchain.toml` pins the toolchain (1.99.1, with `rustfmt` and `clippy`) and rustup
   installs it on first use
 - `cargo-nextest` 0.9.150: `cargo install --locked cargo-nextest@0.9.150`

@@ -11,6 +11,12 @@ SHELL       := bash
 .DEFAULT_GOAL := help
 MAKEFLAGS   += --no-builtin-rules
 
+# Every multi-line recipe needs .ONESHELL (GNU make 3.82+). An older make, such as macOS's /usr/bin/make 3.81, would run
+# each recipe line in its own shell and break the test targets partway through, so refuse it up front.
+ifeq ($(filter oneshell,$(.FEATURES)),)
+$(error sloperator: GNU make 3.82+ required (this is $(MAKE_VERSION)); on macOS: brew install make, then run gmake)
+endif
+
 # Cargo features for the integration tier, e.g. `make test-integration FEATURES=metal`.
 FEATURES ?= model
 # The NFR-3 perf pass builds in the release profile; its own target dir keeps it from replacing the model-enabled
