@@ -1,4 +1,5 @@
-<img width="1254" height="1254" alt="image" src="https://github.com/user-attachments/assets/258e3c35-6499-4a7f-9a29-97b1bb3ed418" />
+<img width="1774" height="887" alt="image" src="https://github.com/user-attachments/assets/2bee6868-b827-4ba3-bbbd-0fb74c56fee1" />
+
 
 # sloperator
 
