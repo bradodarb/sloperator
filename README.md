@@ -442,6 +442,14 @@ there. NAME defaults to the configured `model.name`. The registry:
 Weights are never committed or embedded: `tests/model_cache.rs::no_weights_in_crate` fails on any `*.gguf` file or any
 file over 10 MB in the repository (FR-9.10).
 
+## MCP server
+
+`sloperator mcp` runs an MCP server on stdio with four tools: `lint`, `fix`, `rules` and `explain_rule`. It takes
+text and returns text and never writes files. The model loads on the first model-backed fix and unloads after
+`--idle-unload` seconds (default 600); `--rules-only` never loads it. To use it from an MCP client, add
+`{"command": "sloperator", "args": ["mcp"]}`. See [docs/MCP.md](docs/MCP.md) and ADR-10. It is behind the default
+`mcp` feature.
+
 ## Development
 
 Prerequisites:
