@@ -67,12 +67,12 @@ build: ## release build with default features (model)
 	@$(call need,cargo,$(RUSTUP_HINT))
 	cargo build --release --locked
 
-test: ## unit tier (no model) plus the release-profile perf test
+test: ## unit tier (no model; the mcp server is in) plus the release-profile perf test
 	@$(call need,cargo,$(RUSTUP_HINT))
 	$(call need,cargo-nextest,$(NEXTEST_HINT))
 	rm -f target/nextest/ci/junit.xml target/nextest/ci-perf/junit.xml
 	rc=0
-	cargo nextest run --locked --no-default-features --profile ci --no-tests=pass $(call nt_filter,not binary_id(=sloperator::perf)) || rc=$$?
+	cargo nextest run --locked --no-default-features --features mcp --profile ci --no-tests=pass $(call nt_filter,not binary_id(=sloperator::perf)) || rc=$$?
 	if [ -n '$(RUN_PERF)' ]; then
 	  cargo nextest run --locked --no-default-features --cargo-profile release --target-dir $(PERF_TARGET_DIR) --profile ci-perf --no-tests=pass $(call nt_filter,binary_id(=sloperator::perf)) || rc=$$?
 	else

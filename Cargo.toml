@@ -10,10 +10,11 @@ readme = "README.md"
 publish = false
 
 [features]
-default = ["model"]
+default = ["model", "mcp"]
 model = ["dep:llama-cpp-2"]                  # ADR-02: the only feature that pulls the runtime
 metal = ["model", "llama-cpp-2/metal"]       # passthrough (ADR-02 follow-up)
 cuda = ["model", "llama-cpp-2/cuda"]
+mcp = ["dep:rmcp", "dep:tokio"]               # ADR-10: `sloperator mcp`, the stdio MCP server
 
 [dependencies]
 aho-corasick = "=1.1.5"
@@ -25,12 +26,14 @@ llama-cpp-2 = { version = "=0.1.160", optional = true }
 pulldown-cmark = { version = "=0.13.6", default-features = false }
 rayon = "=1.12.0"
 regex = "=1.13.1"
+rmcp = { version = "=3.8.0", default-features = false, features = ["server", "transport-io"], optional = true }
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.154"
 sha2 = "=0.11.1"
 similar = "=3.2.1"
 tempfile = "=3.27.0"
 thiserror = "=2.0.21"
+tokio = { version = "=1.54.1", default-features = false, features = ["rt", "sync", "time", "io-std"], optional = true }
 toml = "=1.1.8"
 unicode-segmentation = "=1.13.3"
 ureq = "=3.5.0"

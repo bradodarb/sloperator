@@ -52,6 +52,20 @@ impl RewriterFactory for DisabledFactory {
     }
 }
 
+/// The factory this build serves: the llama-cpp-2 runtime with the `model` feature, else [`DisabledFactory`].
+/// `verbose` keeps the runtime's own logs on stderr.
+pub fn default_factory(verbose: bool) -> Box<dyn RewriterFactory> {
+    #[cfg(feature = "model")]
+    {
+        Box::new(runtime::RuntimeFactory::new(verbose))
+    }
+    #[cfg(not(feature = "model"))]
+    {
+        let _ = verbose;
+        Box::new(DisabledFactory)
+    }
+}
+
 /// Resolves the model and runs preflight eagerly (FR-9.6). The model itself is opened on the first `get` (FR-9.4).
 pub struct LazyRewriter<'f> {
     factory: &'f dyn RewriterFactory,

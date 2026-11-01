@@ -37,6 +37,21 @@ pub enum Command {
     /// Download, list or locate models
     #[command(subcommand)]
     Model(ModelCmd),
+    /// Serve the tools over MCP on stdio (lint, fix, rules, explain_rule); never writes files
+    #[cfg(feature = "mcp")]
+    Mcp(McpArgs),
+}
+
+/// `mcp` (ADR-10). Logs go to stderr; stdout carries the protocol.
+#[cfg(feature = "mcp")]
+#[derive(Debug, clap::Args)]
+pub struct McpArgs {
+    /// Never load the model: `fix` uses the rules engine only
+    #[arg(long)]
+    pub rules_only: bool,
+    /// Unload the model after this many idle seconds (0 = never)
+    #[arg(long, value_name = "SECS", default_value_t = crate::mcp::DEFAULT_IDLE_UNLOAD_SECS)]
+    pub idle_unload: u64,
 }
 
 /// `model` subcommands (SPEC §15, FR-2.14). NAME defaults to the configured `model.name`.

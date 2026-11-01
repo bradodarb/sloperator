@@ -11,6 +11,8 @@ use std::time::Instant;
 use rayon::prelude::*;
 
 mod args;
+#[cfg(feature = "mcp")]
+pub use args::McpArgs;
 pub use args::{CheckArgs, Cli, Command, ModelCmd};
 
 use crate::Error;
@@ -67,6 +69,8 @@ pub fn run(
             show_config(path.as_deref(), config.as_deref(), deps, out)
         }
         Command::Model(cmd) => model_cmd(cmd, ui, deps, out, err),
+        #[cfg(feature = "mcp")]
+        Command::Mcp(args) => mcp_cmd(&args, ui, deps),
     };
     match result {
         Ok(code) => code,
@@ -418,6 +422,25 @@ fn model_cmd(
             Ok(ExitCode::Clean)
         }
     }
+}
+
+/// `mcp` (ADR-10): serves until the client disconnects. It reads the real stdin and writes the real stdout (the
+/// protocol), so `stdin`/`out` are unused; the model factory is built on the server's model thread.
+#[cfg(feature = "mcp")]
+fn mcp_cmd(args: &McpArgs, ui: Ui, deps: &Deps) -> Result<ExitCode, Error> {
+    let verbose = ui.verbose > 0;
+    let opts = crate::mcp::Options {
+        rules_only: args.rules_only,
+        idle_unload: (args.idle_unload > 0)
+            .then(|| std::time::Duration::from_secs(args.idle_unload)),
+        verbose,
+        cwd: deps.cwd.clone(),
+    };
+    crate::mcp::run(
+        opts,
+        Box::new(move || crate::engine::default_factory(verbose)),
+    )?;
+    Ok(ExitCode::Clean)
 }
 
 /// The registry entry named `name`; an unknown name is a usage error listing the known ones.
