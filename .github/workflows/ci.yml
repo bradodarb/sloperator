@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  ci:
+    # macOS matches the development machine: llama.cpp builds with Metal behind the default `model` feature.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # rustup reads rust-toolchain.toml (channel, rustfmt, clippy) and installs it on first use.
+      - name: Install toolchain from rust-toolchain.toml
+        run: |
+          channel=$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)
+          rustup toolchain install "$channel" --profile minimal --component rustfmt --component clippy
+          rustc --version
+          cargo --version
+
+      - name: Install cargo-nextest and cargo-deny
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest@0.9.150,cargo-deny@0.20.2
+
+      - name: Install cmake
+        run: command -v cmake || brew install cmake
+
+      # The Makefile needs GNU make 3.82+ (.ONESHELL); the runner's /usr/bin/make is 3.81. Put Homebrew's GNU make first
+      # on PATH as `make`.
+      - name: Install GNU make
+        run: |
+          brew list make >/dev/null 2>&1 || brew install make
+          echo "$(brew --prefix make)/libexec/gnubin" >> "$GITHUB_PATH"
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: make check
+        run: |
+          make --version | head -n 1
+          make check
+
+      - name: make build
+        run: make build
+
+      # Unit tier and perf test only: the integration tier needs the 2.5 GB model.
+      - name: make test
+        run: make test

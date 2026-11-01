@@ -1,0 +1,2 @@
+extend = "team/mid.toml"
+ignore = ["SLP002"]

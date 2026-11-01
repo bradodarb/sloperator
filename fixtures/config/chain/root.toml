@@ -1,0 +1,4 @@
+select = ["SLP001", "SLP002"]
+min_severity = "error"
+[rules.SLP014]
+max_per_1000_words = 9.0

@@ -1,0 +1,4 @@
+select = ["SLP001"]
+
+[model]
+windwo = "paragraph"
