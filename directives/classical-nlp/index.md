@@ -6,6 +6,7 @@
 
 ## Delivery Plan
 
+
 One line per epic, in delivery order (the architecture's phases 1a–6, locked by PRD D-1). Stories separated by spaces run in parallel; `|` starts the next wave.
 
 ```slice
