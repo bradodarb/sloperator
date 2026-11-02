@@ -476,8 +476,8 @@ flowchart TD
 
 | Rule | Enforced by |
 |------|-------------|
-| No file in the repository names the development host or its build paths; `Cargo.toml` has no `path =` dependency | `tests/standalone.rs::no_host_references` (renamed so the case-insensitive scan cannot match its own identifier; SPEC §5) and `::no_external_path_deps` (FR-1.8) |
-| The crate builds and tests when copied alone | `tests/standalone.rs::builds_when_extracted` (copies the repository minus `.git`, `target`, `docs` and `CHANGELOG.md` to a temp dir, runs `cargo test --no-default-features --offline`; integration tier, as it needs a cold build) (NFR-2) |
+| `Cargo.toml` has no `path =` dependency | `tests/standalone.rs::no_external_path_deps` (FR-1.8) |
+| The crate builds and tests when copied alone | `tests/standalone.rs::builds_when_extracted` (copies the repository minus `.git` and `target` to a temp dir, runs `cargo test --no-default-features --offline`; integration tier, as it needs a cold build) (NFR-2) |
 | Only `engine::runtime` names the runtime crate | `tests/layering.rs::runtime_crate_only_in_adapter` (scans `src/**/*.rs` for `llama_cpp_2`/`mistralrs`); and the crate is an optional dependency behind feature `model`, so any other use fails `--no-default-features` builds |
 | Only `model::pull` names the HTTP client | `tests/layering.rs::network_only_in_pull` (scans for `ureq`) (FR-9.1) |
 | `rules`, `doc`, `score`, `edit`, `verify` do no I/O | `tests/layering.rs::pure_modules_have_no_io` (forbids `std::fs`, `std::net`, `std::process`, `std::env` in those directories) |
@@ -735,7 +735,7 @@ results go to `docs/research/spike-results.md`.
 
 | Tier | Proves | Runs as | In CI |
 |------|--------|---------|-------|
-| unit (in-crate `#[cfg(test)]` + `tests/*.rs` without feature `model`) | every rule's fixtures (FR-4.6); doc span classification; directives; config precedence and validation; verify checks; edit apply incl. CRLF; score; each output format; exit codes; engine windowing/masking/contract-check with `FakeRewriter`; layering and standalone scans; NFR-3 perf | `make test` → `cargo nextest run --no-default-features --profile ci` (+ `ci-perf` release pass) | yes (`make test` in CI) |
+| unit (in-crate `#[cfg(test)]` + `tests/*.rs` without feature `model`) | every rule's fixtures (FR-4.6); doc span classification; directives; config precedence and validation; verify checks; edit apply incl. CRLF; score; each output format; exit codes; engine windowing/masking/contract-check with `FakeRewriter`; layering scans and standalone dependency checks; NFR-3 perf | `make test` → `cargo nextest run --no-default-features --profile ci` (+ `ci-perf` release pass) | yes (`make test` in CI) |
 | e2e (binary, in unit tier) | built binary on a fixture with code, links, numbers and a table: protected bytes unchanged after `--fix --rules-only`; stdin; `--diff`; exit codes; missing model → exit 2 | `tests/cli_*.rs` via `assert_cmd` | yes |
 | integration | real model: single load (FR-9.4), seed reproducibility (FR-9.8), rewrite acceptance and rejection on real output, eval report (FR-10.2), extraction build (NFR-2) | `make test-integration` → `cargo nextest run --features model --profile it` | no (needs model in cache + C++ toolchain); run by hand and in Phase 6/7 gates |
 | check | formatting, clippy with and without default features (`-D warnings`), licences and advisories | `make check` | yes |

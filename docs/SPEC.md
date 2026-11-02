@@ -529,24 +529,15 @@ const IO_PATHS: &[&str] = &["std::fs", "std::net", "std::process", "std::env"];
 | `network_only_in_pull` | `ureq` appears only in `src/model/pull.rs`. |
 | `single_exit_point` | `std::process::exit` appears only in `src/main.rs`. |
 
-```rust
-// tests/standalone.rs
-/// The scan itself, so the planted-reference test exercises the same code as `no_host_references`.
-/// Returns (path relative to `root`, first needle found), matching case-insensitively; non-UTF-8 files are skipped.
-fn find_markers(root: &std::path::Path) -> Vec<(std::path::PathBuf, &'static str)>;
-```
+Standalone build checks in `tests/standalone.rs`:
 
 | Test | Asserts |
 |------|---------|
-| `no_host_references` | `find_markers` over the whole repository except `.git/` and `target/` (and *including* `tests/standalone.rs`) returns nothing. The needles are the name of the project the crate was developed in and that project's build-contract path patterns. They are assembled from fragments at run time, so the test file never spells them and does not match itself. Matching is case-insensitive, so no identifier, comment or string in the file contains the name in any case: the constant is `HOST_MARKERS` and the test `no_host_references`. FR-1.8. |
-| `planted_reference_is_caught` | Copies `src/lib.rs` and `tests/standalone.rs` into a `tempfile::TempDir`, appends a comment naming the host project (built at run time from two halves) to the copied `lib.rs`, and asserts `find_markers` reports exactly that file. The unmodified `standalone.rs` copy reports nothing, so the fragment form cannot hide a real reference (Gap 4). |
 | `no_external_path_deps` | Parse `Cargo.toml` with `toml`: no dependency table (including `target.<cfg>` tables) has a `path` key. FR-1.8. |
 | `builds_when_extracted` | `#[ignore = "integration tier"]`. Copies the crate without `.git/` and `target/` to a `tempfile::TempDir`, then runs `cargo test --no-default-features --locked --offline` there and asserts exit 0. NFR-2. |
 
 **Design notes:**
 
-- **The host project's name is banned outright.** One case-insensitive rule catches crate names, paths and package
-  names. The docs are scanned too, so design records name the crate's own files only.
 - **`builds_when_extracted` runs in the integration tier.** It is a cold build, so it is too slow for the unit tier
   (architecture §5). `--offline` works because the registry cache is already warm from the unit tier.
 
@@ -2568,7 +2559,7 @@ The Rust is still uncompiled (no toolchain; see the header note). The make chang
 | Gap | Severity / disposition | Status | Where |
 |-----|------------------------|--------|-------|
 | 14 | HIGH FIX-SPEC | **Fixed.** "serves/stands/functions as" → "is" now fires its fix only when the preceding token in the same sentence is in the fixed guard list `SINGULAR_SUBJECT` (`it`, `this`, `that`, `which`, `who`, `he`, `she`). That is safe-fix rule item 3. After any other token, including a noun subject, the rule fires with no fix and leaves the window to the model, because each of the three words is also a plural noun. The `fixed.md` pairs are now "It serves as a bridge" and "which functions as a buffer". "export these functions as a module", "we expose helper functions as a convenience" and "The tool serves as a bridge" are listed as fires-with-no-fix and asserted in `safe_fix_contexts_grammatical`. | §10 SLP006 row + design note |
-| 4 | MEDIUM FIX-SPEC (still open) | **Fixed.** The identifiers are renamed to `HOST_MARKERS` and `no_host_references`. The file comment now states that no text in `standalone.rs` may contain the banned word in any case, because the scan is case-insensitive. The scan still covers the file with no exemption, so `planted_reference_is_caught`'s claim that the clean copy reports nothing now holds. The architecture §5 rule table is renamed to match. | §5; `ARCHITECTURE-sloperator.md` module-rules table |
+| 4 | MEDIUM FIX-SPEC | Superseded: the one-time repository text scan has been removed; standalone build checks remain. | §5 |
 | 9 | LOW FIX-SPEC (still open) | **Fixed.** The perf nextest run in `make test` is wrapped in `if [ -n '$(RUN_PERF)' ]`. The `else` branch prints a stderr skip banner. A probe under the `Makefile`'s shell flags ran the branch for no `TESTS` and for `…perf#x`, and skipped it for `verify`. All three exited 0. | §3 recipe + design notes |
 | 15 | MEDIUM FIX-SPEC | **Fixed.** §23.2 now has both rows: no cargo → `make test`/`build`/`check` print the banner and exit non-zero; and `TESTS='verify'` → no `ci-perf` run and no perf XML. | §23.2 |
 | 11 | DECIDE | Left for Brad; OD-1 unchanged. | Open Decisions |

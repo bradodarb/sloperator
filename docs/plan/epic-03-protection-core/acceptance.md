@@ -1,5 +1,6 @@
 # Acceptance: epic-03-protection-core
 
+> Historical record: the one-time repository text scan and its planted-reference test have since been removed. Current standalone checks cover path dependencies and extracted builds (SPEC §5).
 **Verdict:** gaps
 **Base:** f6b6076dcc71cea5abad489afa9bed00ddfdb2f6
 **Reviewer:** reviewer, round 2 (after story-04)
@@ -12,11 +13,11 @@
 | Forged edits that drop a number or add a heading are rejected | met | `tests/verify_edits.rs` `rejects_lost_number`, `rejects_new_heading_marker` (line ~135); both pass |
 | `sloperator check` parses every input with `doc::parse` and exits 0 on a clean file | met | `src/cli/mod.rs:56` calls `doc::parse` for each path; `src/cli/mod.rs:68` returns `ExitCode::Clean` when every read succeeds |
 | Epic-01 layering tests still pass | met | the whole-unit run (`make test`) passed 44 of 44, including `sloperator::layering` `forbidden_uses`, `pure_modules_have_no_io`, `single_exit_point` and the others |
-| The tests named in every story pass together on the merged epic | met | targeted run of `verify_edits`, `edit_apply`, `doc_spans` and `standalone#no_host_references` passed 33 of 33. The whole unit passed 44 of 44. Gates tests and discriminate both report PASS |
+| The tests named in every story pass together on the merged epic | met | targeted run of `verify_edits`, `edit_apply`, `doc_spans` and the retired repository text check passed 33 of 33. The whole unit passed 44 of 44. Gates tests and discriminate both report PASS |
 
 ## Round-1 FIX items
 
-- **G1 (host name in `rejects_lost_term`): closed.** `tests/verify_edits.rs:119-140` now uses `Acme`, and every assertion is unchanged (`Check::Terms`, `Protected | Terms`, `terms.get("Acme") == Some(&2)`). A case-insensitive grep for the host name under `src`, `tests` and `fixtures` finds nothing, and `standalone#no_host_references` passes.
+- **G1 (host name in `rejects_lost_term`): closed.** `tests/verify_edits.rs:119-140` now uses `Acme`, and every assertion is unchanged (`Check::Terms`, `Protected | Terms`, `terms.get("Acme") == Some(&2)`). A case-insensitive grep for the host name under `src`, `tests` and `fixtures` finds nothing, and the retired repository text check passes.
 
 ## Gaps
 

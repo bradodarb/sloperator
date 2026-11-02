@@ -1,5 +1,6 @@
 # Story 02: Layering and standalone scans; integration-tier bridge
 
+> Historical record: the one-time repository text scan and its planted-reference test have since been removed. Current standalone checks cover path dependencies and extracted builds (SPEC §5).
 **Epic:** [epic-01-walking-skeleton](../epic-01-walking-skeleton.md)
 **SPEC Refs:** §5, §23.1, §3 (integration tier), DQ-1
 **PRD Refs:** FR-1.7, FR-1.8, NFR-2, FR-9.1
@@ -8,7 +9,7 @@
 
 ## Scope
 
-Add `tests/layering.rs`, whose `FORBIDDEN_USES`, `PURE_DIRS` and `IO_PATHS` tables are verbatim from §5, and `tests/standalone.rs`, which holds `HOST_MARKERS` built with `concat!`, `find_markers`, and the integration-tier `builds_when_extracted`. These tests pass on the stub tree from story 01 and keep guarding every later epic. No production code changes.
+Add `tests/layering.rs`, whose `FORBIDDEN_USES`, `PURE_DIRS` and `IO_PATHS` tables are verbatim from §5, and `tests/standalone.rs`, which holds `no_external_path_deps` and the integration-tier `builds_when_extracted`. These tests pass on the stub tree from story 01 and keep guarding every later epic. No production code changes.
 
 ## Files to Touch
 
@@ -20,8 +21,6 @@ Add `tests/layering.rs`, whose `FORBIDDEN_USES`, `PURE_DIRS` and `IO_PATHS` tabl
 ## Acceptance Criteria
 
 - [ ] Every layering test passes on the current tree, and a planted `use crate::engine` in `src/doc/mod.rs` makes `forbidden_uses` fail (checked locally, not committed) (FR-1.8).
-- [ ] `planted_reference_is_caught` proves the concat marker form cannot hide a real reference (Gap 4).
-- [ ] `tests/standalone.rs` contains the banned host word in no case form (Gap 4, round 2).
 - [ ] Deferred item 1 (DQ-1): after the Gate's integration leg, `target/nextest/it/junit.xml` holds the `builds_when_extracted` testcase (FR-1.4, FR-1.7).
 - [ ] `builds_when_extracted` builds a copy of the crate without `.git` or `target/`, offline, and passes (NFR-2).
 - [ ] Every test in Test Cases passes with the Gate command below.
@@ -35,8 +34,6 @@ Add `tests/layering.rs`, whose `FORBIDDEN_USES`, `PURE_DIRS` and `IO_PATHS` tabl
 | 3 | `sloperator::layering` | `runtime_crate_only_in_adapter` | llama_cpp_2/mistralrs appear only in engine/runtime.rs | ADR-02 |
 | 4 | `sloperator::layering` | `network_only_in_pull` | ureq appears only in model/pull.rs | FR-9.1 |
 | 5 | `sloperator::layering` | `single_exit_point` | std::process::exit only in main.rs | NFR-4 |
-| 6 | `sloperator::standalone` | `no_host_references` | no host-project marker in the crate | FR-1.8 |
-| 7 | `sloperator::standalone` | `planted_reference_is_caught` | the scan finds a planted marker | FR-1.8 |
 | 8 | `sloperator::standalone` | `no_external_path_deps` | no `path =` dependency in Cargo.toml | FR-1.8, NFR-2 |
 | 9 | `sloperator::standalone` | `builds_when_extracted` | the extracted copy builds and tests offline | NFR-2, FR-1.7 |
 

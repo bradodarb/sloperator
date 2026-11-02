@@ -1,5 +1,6 @@
 # Epic 08: Eval harness and report
 
+> Historical record: the one-time repository text scan and its planted-reference test have since been removed. Current standalone checks cover path dependencies and extracted builds (SPEC §5).
 **Status:** delivered
 
 **Goal:** `tests/eval.rs` produces the FR-10.2 report per cached model on the 20 eval paragraphs and enforces 20/20 integrity and the spike's latency budget, and both tiers run green through the contract.
@@ -14,7 +15,7 @@ Copied from this epic's line in `index.md`. Stories in one wave run in parallel;
 | Wave | Stories | Why this order |
 |------|---------|----------------|
 | 1 | [story-01-eval-harness](./epic-08-eval/story-01-eval-harness.md), [story-02-no-network-sandbox](./epic-08-eval/story-02-no-network-sandbox.md), [story-03-spec21-runtime-text](./epic-08-eval/story-03-spec21-runtime-text.md) | Three independent pieces with disjoint files: the eval harness (`tests/eval.rs`, `eval/README.md`), the sandboxed no-network test (`tests/model_real.rs`), and the SPEC §21 text (`docs/SPEC.md`). Stories 02 and 03 are epic-07 acceptance-audit follow-ups (changes.md CH-16, CH-17). |
-| 2 | [story-04-readme-standalone](./epic-08-eval/story-04-readme-standalone.md) | Acceptance-audit fix (Gap 1): story 01's `eval/README.md` named the host project, so `standalone#no_host_references` failed. This story rewrites the run instruction with cargo and touches only the README, so it runs after wave 1. |
+| 2 | [story-04-readme-standalone](./epic-08-eval/story-04-readme-standalone.md) | Acceptance-audit fix (Gap 1): story 01's `eval/README.md` named the host project, so the retired repository text check failed. This story rewrites the run instruction with cargo and touches only the README, so it runs after wave 1. |
 
 ## Acceptance Criteria
 
