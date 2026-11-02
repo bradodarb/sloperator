@@ -713,7 +713,7 @@ choice; the SPEC fixes the numbers.
   .gitignore                /target
   clippy.toml               tests may unwrap
   README.md                 usage, score formula (FR-5.1, 5.4), model setup, limits of verification
-  LICENSE                   (Question 10 assumption)
+  LICENSE                   MIT
   src/
     main.rs                 parse Cli, build Deps, call cli::run, std::process::exit
     lib.rs  error.rs

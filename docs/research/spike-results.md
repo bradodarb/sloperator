@@ -110,7 +110,7 @@ and its appendix notice, which names the licensor, reads:
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 ```
 
-Apache-2.0 permits use, redistribution and use in a tool distributed under `MIT OR Apache-2.0`. sloperator does not bundle the model: `sloperator model pull` downloads it on the user's machine (ADR-08), so the licence terms (including carrying the licence and notices if the file is redistributed) fall on whoever redistributes the GGUF. `llama-cpp-2` is `MIT OR Apache-2.0` (SPEC §1). Llama 3.2 stays excluded and Phi-4-mini (MIT) remains the unmeasured fallback; nothing here rules the chosen model out.
+Apache-2.0 permits use, redistribution and use in a tool distributed under MIT. sloperator does not bundle the model: `sloperator model pull` downloads it on the user's machine (ADR-08), so the licence terms (including carrying the licence and notices if the file is redistributed) fall on whoever redistributes the GGUF. `llama-cpp-2` is `MIT OR Apache-2.0` (SPEC §1). Llama 3.2 stays excluded and Phi-4-mini (MIT) remains the unmeasured fallback; nothing here rules the chosen model out.
 
 ## TESTS propagation through the Makefile (PRD Phase 1 task 4)
 
