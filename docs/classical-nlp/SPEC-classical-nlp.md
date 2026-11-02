@@ -1,15 +1,15 @@
 # Technical Specification: Classical (Non-Neural) NLP for Sloperator
 
-**Version:** 0.1
+**Version:** 0.4
 **Date:** 2026-11-02
 **Status:** Draft
 **Module(s):** `sloperator` (one crate): new `src/text/`; changed `src/doc/`, `src/rules/`, `src/engine/window.rs`, `src/engine/mask.rs`, `src/verify/`, `src/pipeline/`, `src/report/`, `src/mcp/`, `src/config/`, `src/cli/`, `tests/`, `fixtures/rules/`, `eval/`, `docs/`
 **Companion:** [PRD](./PRD-classical-nlp.md) · [Architecture](./ARCHITECTURE-classical-nlp.md) · ADRs [01](./adr/ADR-01-text-analysis-layer.md)–[09](./adr/ADR-09-param-bounds.md) · no UX spec (the architecture records "no UX scope": CLI, JSON and MCP output only)
 **Depends On:** none. It extends the product SPEC ([`docs/SPEC.md`](../SPEC.md)). §10 there (the rule catalogue) and the verification-limits sentence (`docs/SPEC.md:238`) are edited by §18 and §25 here.
 
-This SPEC details the approved architecture. Where the code forced a departure, see [Architecture Deviation Notes](#architecture-deviation-notes). D-1 to D-11 of the PRD and ADR-01 to ADR-07 and ADR-09 are taken as decided. ADR-08 is still **Proposed** and is routed to Brad as OD-1. Phase 2 (§20, §21) is written for its recommended option, and OD-1 states what changes under the other option.
+This SPEC details the approved architecture (version 0.2, which absorbed review round 1's architecture items). Where the code forced a departure, see [Architecture Deviation Notes](#architecture-deviation-notes). D-1 to D-11 of the PRD and ADR-01 to ADR-07 and ADR-09 are taken as decided. Three questions are Brad's and are routed as Open Decisions: OD-1 (ADR-08, still **Proposed**), OD-2 (the proper-noun proxy's common-word exemption, review Gap 11) and OD-3 (configurable report floors, review Gap 5). Each affected section is written for one stated option, and its Open Decision says what changes under the others. This version revises the round-1 SPEC in place: see the [Revision Log](#revision-log).
 
-Code blocks were compile-checked where they are new and non-trivial. `text::segment`, `text::metrics`, `text::syllable`, `text::lexicon`, the tagger engine, `Prose`, `verify::meaning` and the two template regexes were built in a scratch crate outside the worktree, against this crate as a path dependency (`default-features = false`), with `cargo test` and `cargo clippy --all-targets` clean. That run also checked the segmenter: its word count equals `Document::prose_words` on all 77 Markdown files under `fixtures/` and `eval/paragraphs/`, and it holds on 500 random 200-character inputs. Code that edits existing files (pipeline, report, config, rules) is written against the signatures read at the cited lines. The story that applies each one compile-checks it through its gate.
+Code blocks were compile-checked where they are new and non-trivial. In earlier passes the revised `text::segment` (§4), SLP001's context guard (§20; rebuilt again in version 0.4), SLP003's additive-frame decline (§30) and the fallback stemmer (§32) were rebuilt and tested in a scratch crate outside the worktree (each section says what was checked). `text::segment`, `text::metrics`, `text::syllable`, `text::lexicon`, the tagger engine, `Prose`, `verify::meaning` and the two template regexes were built in a scratch crate outside the worktree, against this crate as a path dependency (`default-features = false`), with `cargo test` and `cargo clippy --all-targets` clean. That run also checked the segmenter: its word count equals `Document::prose_words` on all 77 Markdown files under `fixtures/` and `eval/paragraphs/`, and it holds on 500 random 200-character inputs. Code that edits existing files (pipeline, report, config, rules) is written against the signatures read at the cited lines. The story that applies each one compile-checks it through its gate.
 
 Test commands use the repo's own runner (`docs/DEVELOPMENT.md:20-28`): `make test TESTS='<selector> ...'`. A selector is a substring of a test binary or test name, or `binary_id#test`.
 
@@ -24,7 +24,7 @@ Phase 1a — baseline
 Phase 1b — one sentence definition
 3. [`doc`: `continuation_prefix_len` and `BlockText::to_text`](#3-doc-continuation_prefix_len-and-blocktextto_text)
 4. [`text::segment`](#4-textsegment)
-5. [Window sentence ranges use the segmenter; `starts_sentence` moves](#5-window-sentence-ranges-use-the-segmenter-starts_sentence-moves)
+5. [Window sentence ranges read the pass's segmentation; `starts_sentence` moves](#5-window-sentence-ranges-read-the-passs-segmentation-starts_sentence-moves)
 6. [`text` module root and layering rows](#6-text-module-root-and-layering-rows)
 
 Phase 1c — metrics shipped
@@ -81,21 +81,20 @@ Phase 6 — redundancy
 
 ## 1. Standalone-scan hygiene of the initiative docs
 
-**File:** `docs/classical-nlp/PRD-classical-nlp.md` (changed at line 298), `docs/classical-nlp/ARCHITECTURE-classical-nlp.md` (changed at line 563)
+**File:** `docs/classical-nlp/PRD-classical-nlp.md` (changed at line 298)
 **Component:** §12 Delivery Architecture, phase 1a gate (all existing tests pass); no ADR
 **Implements:** NFR-1, NFR-10
 
 `tests/standalone.rs::no_host_references` scans every file in the repository except `.git` and `target`
 (`tests/standalone.rs:37-59`). It fails on any line that names the development host's build contract
-(`tests/standalone.rs:16-35`). Two lines of this initiative's own documents do so today, so that test fails on this
-branch before any code changes:
+(`tests/standalone.rs:16-35`). One line of this initiative's own documents does so today, so that test fails on this
+branch before any code changes: `PRD-classical-nlp.md:298` (NFR-10, "Verified by:") names the host build contract's
+test verb. A scan of every tracked file for the test's markers finds no other file. The architecture's §11 already
+uses the repo's form after its version 0.2.
 
-- `PRD-classical-nlp.md:298` (NFR-10, "Verified by:"): it names the host build contract's test verb.
-- `ARCHITECTURE-classical-nlp.md:563` (§11 Test Architecture, row "Unit"): the same, in its "Runs as" column.
-
-The first story rewrites both cells in the repo's own form, `make test TESTS='text::'` and "the listed tests exist
-and pass under `make test`" (`docs/DEVELOPMENT.md:20-28`), and changes nothing else in those documents. This SPEC
-and every later artifact in `docs/` use only that form.
+The first story rewrites that cell in the repo's own form, "the listed tests exist and pass under `make test`"
+(`docs/DEVELOPMENT.md:20-28`), and changes nothing else in the PRD. This SPEC and every later artifact in `docs/` use
+only that form.
 
 **Design notes:**
 
@@ -241,24 +240,27 @@ impl BlockText {
 ```
 
 Every call `mask::prefix_len(doc, a, b)` becomes `doc.continuation_prefix_len(a, b)`, at `src/engine/mask.rs:80` and
-`src/engine/window.rs:162, 220, 230`, and `src/engine/window.rs:250` moves into §4. The old function is deleted;
-nothing re-exports it (NFR-9).
+`src/engine/window.rs:162, 220, 230`. The call at `src/engine/window.rs:250` is inside `sentence_range`, which §5
+deletes; its logic moves into `segment::blanked` (§4). The old function is deleted; nothing re-exports it (NFR-9).
 
 ---
 
 ## 4. `text::segment`
 
 **File:** `src/text/segment.rs` (new)
-**Component:** §4.1 Segmenter (ADR-03)
-**Implements:** FR-1.1, FR-1.2, FR-1.3, FR-1.5, FR-2.10, NFR-7
+**Component:** §4.1 Segmenter (ADR-03, ADR-02)
+**Implements:** FR-1.1, FR-1.2, FR-1.3, FR-1.4, FR-1.5, FR-2.10, NFR-2, NFR-7
 
-This is the crate's one definition of sentences and words. The boundary scan is the body of
-`engine::window::sentence_range` (`src/engine/window.rs:241-263`), moved here without changing behaviour. Words are
-read the way `prose_words` reads them (`src/doc/mod.rs:234-241`). Each word is then assigned to the sentence whose
-raw range holds its start, so `words.len() == doc.prose_words()` holds by construction (FR-1.3).
+This is the crate's one definition of sentences and words, and the only place that scans a block for sentence bounds.
+The boundary scan is the body of `engine::window::sentence_range` (`src/engine/window.rs:241-263`), moved here without
+changing behaviour. `segment` runs it once per block and keeps each block's raw bounds in `Segments`, so window
+planning reads them later instead of scanning again (architecture §4.1, Gap 1 of review round 1). Words are read the
+way `prose_words` reads them (`src/doc/mod.rs:234-241`). Each word is then assigned to the sentence whose raw range
+holds its start, so `words.len() == doc.prose_words()` holds by construction (FR-1.3).
 
 ```rust
 //! Sentences and words over prose (classical-nlp SPEC §4, ADR-03). Pure: a function of the `Document`, no I/O.
+//! `segment` is the only function that scans a block for sentence bounds; everything else reads its result.
 
 use std::ops::Range;
 
@@ -266,8 +268,9 @@ use unicode_segmentation::UnicodeSegmentation;
 
 use crate::doc::{BlockId, Document, OBJ, SpanKind};
 
-/// One sentence of one block. `range` is its source bytes with surrounding whitespace trimmed; `words` indexes
-/// [`Segments::words`]. A sentence with no prose word (only inline code, say) has an empty `words` range.
+/// One sentence of one block. `range` is its source bytes with surrounding whitespace trimmed (trimmed on the
+/// blanked copy, so a continuation prefix such as `> ` is never inside it); `words` indexes [`Segments::words`]. A
+/// sentence with no prose word (only inline code, say) has an empty `words` range.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Sentence {
     pub block: BlockId,
@@ -282,12 +285,17 @@ pub struct Word {
     pub sentence_initial: bool,
 }
 
-/// Owned (no borrow of the Document), so it sits beside the Document in pipeline values (ADR-02). Both vectors are
-/// in source order; a word in no block (bytes between blocks) is in `words` but in no sentence.
+/// Owned (no borrow of the Document), so it sits beside the Document in pipeline values (ADR-02). `sentences` and
+/// `words` are in source order (blocks are ordered and disjoint, `src/doc/mod.rs:166-167`); a word in no block
+/// (bytes between blocks) is in `words` but in no sentence.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Segments {
     pub sentences: Vec<Sentence>,
     pub words: Vec<Word>,
+    /// Indexed by `BlockId`: the block's raw scan starts relative to its start, with the blanked length appended
+    /// (the `starts` vector `src/engine/window.rs:258-263` builds today). Whitespace-only pieces stay in it. Empty
+    /// for a block whose blanked copy could not be built.
+    bounds: Vec<Vec<usize>>,
 }
 
 impl Segments {
@@ -308,11 +316,58 @@ impl Segments {
         let i = self.sentences.partition_point(|s| s.words.end <= w);
         self.sentences.get(i).filter(|s| s.words.contains(&w)).map(|_| i)
     }
+
+    /// Sentence start offsets of `block`, relative to its start (FR-1.2, FR-1.4). A slice of the cache: no scan.
+    pub fn sentence_starts(&self, block: BlockId) -> &[usize] {
+        match self.bounds.get(block.0 as usize) {
+            Some(b) if !b.is_empty() => &b[..b.len() - 1],
+            _ => &[0],
+        }
+    }
+
+    /// The sentences of `block` that `r` touches, as one source range with surrounding whitespace trimmed: today's
+    /// `sentence_range` (`src/engine/window.rs:241-277`) as arithmetic over the cached bounds (FR-1.4, NFR-2). The
+    /// range arithmetic is unchanged; the trim is the first touched sentence's trimmed start to the last one's
+    /// trimmed end, which is what trimming the joined pieces gave. The block range when every touched piece is
+    /// whitespace. No scan.
+    pub fn sentence_span(&self, doc: &Document, block: BlockId, r: &Range<usize>) -> Range<usize> {
+        let Some(b) = doc.blocks.get(block.0 as usize).map(|b| b.range.clone()) else {
+            return r.clone();
+        };
+        let starts = match self.bounds.get(block.0 as usize) {
+            Some(s) if s.len() >= 2 => s,
+            _ => return b,
+        };
+        let (lo, hi) = (r.start.saturating_sub(b.start), r.end.max(r.start + 1).saturating_sub(b.start));
+        let first = starts.partition_point(|&s| s <= lo).saturating_sub(1);
+        let last = starts.partition_point(|&s| s < hi).max(first + 1);
+        let (s, e) = (b.start + starts[first], b.start + starts[last.min(starts.len() - 1)]);
+        let i = self.sentences.partition_point(|x| x.range.start < s);
+        let j = self.sentences.partition_point(|x| x.range.end <= e);
+        match (self.sentences.get(i), j.checked_sub(1).and_then(|k| self.sentences.get(k))) {
+            (Some(a), Some(z)) if i < j && a.block == block => a.range.start..z.range.end,
+            _ => b,
+        }
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Block scans run on this thread (NFR-2 test hook, architecture §4.8). Per thread and absent from production
+    /// builds, so NFR-8's "no mutable global state" holds.
+    static SCANS: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
+/// How many block scans this thread has run so far (in-crate tests only).
+#[cfg(test)]
+pub(crate) fn scans() -> u32 {
+    SCANS.with(std::cell::Cell::get)
 }
 
 /// The block's bytes with line breaks and continuation prefixes blanked to spaces (UAX #29 breaks after every line
-/// feed otherwise). `None` for an unknown block. Only ASCII bytes are replaced with ASCII bytes, so the copy is UTF-8.
-pub(crate) fn blanked(doc: &Document, block: BlockId) -> Option<String> {
+/// feed otherwise). `None` for an unknown block. Only ASCII bytes are replaced with ASCII bytes, so the copy is UTF-8
+/// and has the block's length.
+fn blanked(doc: &Document, block: BlockId) -> Option<String> {
     let b = doc.blocks.get(block.0 as usize)?.range.clone();
     let mut scan = doc.src.as_bytes().get(b.clone())?.to_vec();
     for byte in scan.iter_mut().filter(|b| **b == b'\n' || **b == b'\r') {
@@ -330,19 +385,13 @@ pub(crate) fn blanked(doc: &Document, block: BlockId) -> Option<String> {
 
 /// UAX #29 sentence starts in a blanked block copy, relative to `block_start`; a bound strictly inside a protected
 /// run is not a bound.
-pub(crate) fn scan_starts(doc: &Document, block_start: usize, scan: &str) -> Vec<usize> {
+fn scan_starts(doc: &Document, block_start: usize, scan: &str) -> Vec<usize> {
+    #[cfg(test)]
+    SCANS.with(|c| c.set(c.get() + 1));
     scan.split_sentence_bound_indices()
         .map(|(i, _)| i)
         .filter(|&i| i == 0 || !doc.is_protected(&(block_start + i..block_start + i)))
         .collect()
-}
-
-/// Sentence start offsets within `block`'s source range, relative to its start (FR-1.2, FR-1.4).
-pub fn sentence_starts(doc: &Document, block: BlockId) -> Vec<usize> {
-    match (blanked(doc, block), doc.blocks.get(block.0 as usize)) {
-        (Some(scan), Some(b)) => scan_starts(doc, b.range.start, &scan),
-        _ => vec![0],
-    }
 }
 
 /// Whether the text byte `at` of a `BlockText` starts a sentence: only whitespace before it, or `.`, `!` or `?` is
@@ -366,11 +415,12 @@ pub fn starts_sentence(text: &str, at: usize) -> bool {
     }
 }
 
-/// Every block's sentences and every prose word (FR-1.1). Total: malformed input gives fewer sentences, never a
-/// panic.
+/// Every block's sentences and every prose word (FR-1.1), with each block's raw bounds cached for window planning.
+/// One scan per block. Total: malformed input gives fewer sentences, never a panic.
 pub fn segment(doc: &Document) -> Segments {
     let mut sentences: Vec<Sentence> = Vec::new();
     let mut raw: Vec<Range<usize>> = Vec::new(); // untrimmed sentence ranges, parallel to `sentences`
+    let mut bounds: Vec<Vec<usize>> = vec![Vec::new(); doc.blocks.len()];
     for block in &doc.blocks {
         let Some(scan) = blanked(doc, block.id) else {
             continue;
@@ -388,6 +438,9 @@ pub fn segment(doc: &Document) -> Segments {
             }
             sentences.push(Sentence { block: block.id, range: b0 + s + lead..b0 + e - trail, words: 0..0 });
             raw.push(b0 + s..b0 + e);
+        }
+        if let Some(slot) = bounds.get_mut(block.id.0 as usize) {
+            *slot = starts;
         }
     }
     let mut words: Vec<Word> = Vec::new();
@@ -423,66 +476,147 @@ pub fn segment(doc: &Document) -> Segments {
         }
         end = s.words.end;
     }
-    Segments { sentences, words }
+    Segments { sentences, words, bounds }
 }
 ```
 
 **Design notes:**
 
-- `blanked` and `scan_starts` are `pub(crate)` so the window can keep its trimming on the blanked copy, byte for
-  byte as today (§5). `sentence_starts` is the public form the architecture names.
+- `blanked` and `scan_starts` are private (architecture §4.1, §5): the compiler rejects a call from any other module,
+  so nothing outside `segment` can rescan a block. `segment` is their only caller, and `Prose::new` (§9) is the only
+  production caller of `segment` (§6's layering test).
+- Why `sentence_span` equals today's `sentence_range` byte for byte: the range arithmetic (`lo`, `hi`, `first`,
+  `last`) is copied unchanged over the same `starts`. Today's code trims the joined pieces `scan[s..e]` on the
+  blanked copy. Leading whitespace of the join runs through any whitespace-only pieces and into the first
+  non-whitespace piece, ending at that piece's trimmed start, which `segment` cached as a `Sentence::range.start`
+  (trimmed on the same blanked copy). The trailing side is symmetric. When every touched piece is whitespace, no
+  sentence lies in `[s, e)` and both return the block range. A block with fewer than two cached bounds is empty, and
+  today's code returns the block range for it too. The scratch run below checked this on real input.
 - Words come only from prose spans, so protected runs and `OBJ` placeholders are never words (FR-1.2). A sentence
   bound strictly inside a protected run is dropped by `scan_starts` (FR-1.2).
 - Architecture Risk 1 (FR-1.3 vs block-less prose) holds by construction: a word with no sentence is still pushed.
   On today's fixtures no word lacks a sentence (scratch run).
+- Compile and equivalence check (this pass): this module, with `crate::doc` read as `sloperator::doc` and
+  `continuation_prefix_len` inlined from `src/engine/mask.rs:107-117`, was built in a scratch crate against this
+  crate. A test compared `sentence_span` with a verbatim copy of today's `sentence_range` over all 175 Markdown files
+  under `fixtures/`, `eval/paragraphs/` and `docs/`. For every block it tried every char-boundary start with the next
+  12 ends and the block end, and all results were equal. In the same run `segment` scanned exactly once per block,
+  `sentence_span` scanned zero times, and `words.len() == prose_words()` held on every file.
 
 ---
 
-## 5. Window sentence ranges use the segmenter; `starts_sentence` moves
+## 5. Window sentence ranges read the pass's segmentation; `starts_sentence` moves
 
-**File:** `src/engine/window.rs` (changed at lines 7-15 imports, 237-278 `sentence_range`), `src/rules/helpers.rs` (changed at lines 138-157)
-**Component:** §4.11 Pipeline and windows; §4.1 Segmenter (ADR-03)
-**Implements:** FR-1.4, NFR-9
+**File:** `src/engine/window.rs` (changed at lines 7-15 imports, 71-108 `windows`, 237-278 `sentence_range` deleted; new `#[cfg(test)] mod tests` at the end), `src/rules/helpers.rs` (changed at lines 138-157), `tests/engine.rs` (call sites at lines 71, 137, 145, 163, 248, 252, 262, 266), `tests/text_segment.rs` (new oracle test, §36.1)
+**Component:** §4.11 Pipeline and windows; §4.1 Segmenter (ADR-02, ADR-03)
+**Implements:** FR-1.4, NFR-2, NFR-9
 
-`sentence_range` keeps only its range arithmetic and trimming. The boundary scan comes from `text::segment`, so the
-crate has one definition of a sentence.
+`windows` gains `prose: &text::Prose`, the one `detect_in` built for the same `doc` (§11). In Sentence mode each
+selecting finding's range is `prose.segments().sentence_span(doc, b, &f.range)`: binary searches over cached bounds,
+no scan. N selecting findings in one paragraph cost zero block scans, and the existing `picked.contains` dedup
+(`src/engine/window.rs:93-95`) is unchanged. `sentence_range` (lines 237-278) is deleted with its doc comment.
 
 ```rust
-use crate::text::segment;
+use crate::text::Prose;
 
-/// The sentences of `block` that `r` touches, as one source range with surrounding whitespace trimmed. Sentence
-/// bounds are `text::segment`'s (FR-1.4); trimming uses the same blanked copy, so continuation prefixes trim away.
-fn sentence_range(doc: &Document, block: BlockId, r: &Range<usize>) -> Range<usize> {
-    let b = doc.blocks[block.0 as usize].range.clone();
-    let Some(scan) = segment::blanked(doc, block) else {
-        return b;
-    };
-    let mut starts = segment::scan_starts(doc, b.start, &scan);
-    starts.push(scan.len());
-    let (lo, hi) = (
-        r.start.saturating_sub(b.start),
-        r.end.max(r.start + 1).saturating_sub(b.start),
-    );
-    let first = starts.partition_point(|&s| s <= lo).saturating_sub(1);
-    let last = starts.partition_point(|&s| s < hi).max(first + 1);
-    let (s, e) = (starts[first], starts[last.min(starts.len() - 1)]);
-    let piece = &scan[s..e];
-    let lead = piece.len() - piece.trim_start().len();
-    let trail = piece.len() - piece.trim_end().len();
-    if lead + trail >= piece.len() {
-        return b;
+/// … (existing doc, lines 71-74), plus: `prose` is the analysis of this same `doc` (one per document pass, ADR-02);
+/// Sentence-mode ranges come from its cached segmentation, so planning never rescans a block (NFR-2).
+pub fn windows(
+    doc: &Document,
+    prose: &Prose,
+    findings: &[Finding],
+    frozen: &[Range<usize>],
+    s: &Settings,
+) -> Vec<WindowPlan> {
+    let mut picked: Vec<(Option<BlockId>, Range<usize>)> = Vec::new();
+    for f in findings.iter().filter(|f| selects(f, s.min_severity)) {
+        let entry = match block_of(doc, &f.range) {
+            Some(b) => {
+                let range = match s.model.window {
+                    WindowMode::Paragraph => doc.blocks[b.0 as usize].range.clone(),
+                    WindowMode::Sentence => prose.segments().sentence_span(doc, b, &f.range),
+                };
+                (Some(b), range)
+            }
+            None => (None, f.range.clone()),
+        };
+        if !picked.contains(&entry) {
+            picked.push(entry);
+        }
     }
-    b.start + s + lead..b.start + e - trail
+    // … sort and map to plans, lines 98-107, unchanged …
 }
 ```
 
 The `use unicode_segmentation::UnicodeSegmentation;` import at `src/engine/window.rs:9` is removed, because nothing
-else in the file uses it.
+else in the file uses it. After this change `split_sentence_bound_indices` appears in `src/` only in
+`src/text/segment.rs` (§6's layering test).
+
+Every `windows(d, …)` call in `tests/engine.rs` (lines 71, 137, 145, 163, 248, 252, 262, 266) builds
+`let prose = Prose::new(&d);` after parsing and passes `&prose` as the second argument. Nothing else in those tests
+changes, which is the phase-1b gate (architecture §12). The pipeline call site is §11.
+
+The window planning regression (architecture §11, "Window segmentation work") is an in-crate test, because the scan
+counter is `#[cfg(test)]` (§4):
+
+```rust
+// src/engine/window.rs
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+    use std::sync::Arc;
+
+    use super::*;
+    use crate::config::{CliOverrides, Resolver};
+    use crate::doc::{self, Format, ProtectSettings};
+    use crate::text::segment;
+
+    /// NFR-2 (Gap 1): one paragraph of three sentences, four Model-class findings in Sentence mode over two of
+    /// them. `Prose::new` scans the one block once; `windows` adds no scan, and the four findings dedup into two
+    /// windows.
+    #[test]
+    fn planning_does_not_rescan() {
+        let src = "The cache plays a crucial role in builds and plays a vital role in tests. The index plays a \
+                   pivotal role in search and plays a crucial role in ranking. The log is plain.\n";
+        let d = doc::parse(Arc::from(src), Format::Markdown, &ProtectSettings::default());
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("no-config-here/doc.md");
+        let mut s = (*Resolver::new(CliOverrides::default(), None).unwrap().for_file(&path).unwrap()).clone();
+        s.model.window = WindowMode::Sentence;
+        let findings: Vec<Finding> = ["plays a crucial role", "plays a vital role", "plays a pivotal role"]
+            .iter()
+            .flat_map(|n| src.match_indices(n).map(|(at, m)| at..at + m.len()).collect::<Vec<_>>())
+            .map(|range| Finding {
+                code: RuleCode(7), // significance-puffery, FixClass::Model
+                range,
+                message: "test".into(),
+                severity: Severity::Warning,
+                fix: None,
+            })
+            .collect();
+        assert_eq!(findings.len(), 4);
+        let before = segment::scans();
+        let prose = Prose::new(&d);
+        assert_eq!(segment::scans() - before, 1, "one block, one scan");
+        let planned = segment::scans();
+        let plans = windows(&d, &prose, &findings, &[], &s);
+        assert_eq!(segment::scans(), planned, "window planning rescanned a block");
+        assert_eq!(plans.iter().filter(|p| matches!(p, WindowPlan::Rewrite(_))).count(), 2);
+    }
+}
+```
 
 In `src/rules/helpers.rs` the body of `starts_sentence` (lines 138-157) is deleted and replaced by
 `pub use crate::text::segment::starts_sentence;`. The call sites in SLP008, SLP012 and SLP016
 (`slp008…rs:4`, `slp012…rs:7`, `slp016…rs:4`) still compile. This is the one re-export ADR-03 calls for. There is a
 single definition, not an alias kept for compatibility.
+
+**Design notes:**
+
+- FR-1.4's "window sentence ranges unchanged" is proven twice. The existing `tests/engine.rs` window tests pass with
+  only the added argument, and `text_segment::sentence_span_equals_old_sentence_range` (§36.1) compares
+  `sentence_span` with a test-local copy of today's `sentence_range` on every fixture. That copy is the oracle for
+  the deleted code. It lives in the test file and is not called from `src/`, so it is not a shim.
+- The test path `no-config-here/doc.md` is the one `tests/engine.rs:29-36` uses, so no checkout config applies.
 
 ---
 
@@ -511,8 +645,9 @@ single definition, not an alias kept for compatibility.
 // PURE_DIRS gains "src/text/".
 ```
 
-Two structural tests guard the "once per document pass" property of NFR-2 (§27). They need a variant of `only_in`
-(`tests/layering.rs:189-209`) that takes several allowed files, so `only_in` is reimplemented through it:
+Four structural tests guard the "once per document pass" property of NFR-2 (architecture §5, last row; §27). They
+need a variant of `only_in` (`tests/layering.rs:189-209`) that takes several allowed files, so `only_in` is
+reimplemented through it:
 
 ```rust
 /// Asserts that every needle appears in no `src/` file outside `allowed`.
@@ -537,15 +672,33 @@ fn tagger_runs_only_inside_prose() {
     only_in(&["tagger::tag("], "src/text/mod.rs");
 }
 
-/// NFR-2: one `Prose` per document pass. It is built where a pass parses (`detect_in`) and in in-crate unit tests.
+/// NFR-2: one `Prose` per document pass. It is built where a pass parses (`detect_in`) and in the in-crate unit
+/// tests of `engine::window` (§5) and `rules` (§27).
 #[test]
 fn prose_built_only_per_pass() {
-    only_in_files(&["Prose::new("], &["src/pipeline/mod.rs", "src/text/mod.rs", "src/rules/mod.rs"]);
+    only_in_files(
+        &["Prose::new("],
+        &["src/pipeline/mod.rs", "src/text/mod.rs", "src/engine/window.rs", "src/rules/mod.rs"],
+    );
+}
+
+/// NFR-2 / FR-1.4 (Gap 1): sentence bounds are scanned only by `segment`, which only `Prose::new` calls.
+#[test]
+fn segmentation_runs_only_inside_prose() {
+    only_in(&["segment::segment("], "src/text/mod.rs");
+}
+
+/// FR-1.4: one sentence definition. The UAX #29 sentence scan exists only in the segmenter.
+#[test]
+fn sentence_scan_only_in_segmenter() {
+    only_in(&["split_sentence_bound_indices"], "src/text/segment.rs");
 }
 ```
 
 `tagger_runs_only_inside_prose` lands with Phase 4. Until then the needle matches nothing, and the test still
-passes.
+passes. The other three land with Phase 1b. In `src/engine/window.rs` and `src/rules/mod.rs`, `Prose::new(` occurs
+only inside `#[cfg(test)] mod tests`; a substring scan cannot see the `cfg`, so review of those two files holds that
+line. `src/text/mod.rs` is allowed because `Prose::new` is defined and documented there.
 
 **Design notes:**
 
@@ -797,7 +950,9 @@ const _: fn() = || {
 };
 ```
 
-Phase 4 adds the `tags` field, its accessor and the test counter (§27).
+`Prose::new` is the only production caller of `segment::segment` (§6), so a document pass scans each block exactly
+once, and every later reader (metrics, rules, window planning) uses the cached result. Phase 4 adds the `tags`
+field, its accessor and the test counter (§27).
 
 ---
 
@@ -843,9 +998,9 @@ Test call sites build `let prose = Prose::new(&d);` after parsing and pass `&pro
 
 ## 11. Pipeline: `Analysis.prose`, `FileResult.metrics`
 
-**File:** `src/pipeline/mod.rs` (changed at lines 17, 33-39, 52-63, 69-77, 80-92, 99-196, 264-292, 294-309), `tests/write.rs` (line 25), `tests/report.rs` (lines 63, 242)
+**File:** `src/pipeline/mod.rs` (changed at lines 17, 33-39, 52-63, 69-77, 80-92, 99-196, 212-227, 264-292, 294-309), `tests/write.rs` (line 25), `tests/report.rs` (lines 63, 242)
 **Component:** §4.11 Pipeline and windows (ADR-02, ADR-05)
-**Implements:** FR-3.4, NFR-2
+**Implements:** FR-1.4, FR-3.4, NFR-2
 
 ```rust
 use crate::text::{self, Counts};
@@ -897,11 +1052,20 @@ fn detect_in(text: Arc<str>, source: &Source) -> Result<Detected, Error> {
     let findings0 = a.findings;
     let metrics_before = prose0.counts(&doc0).clone();
     // …
-    // :146-148 — the step-1 tuple has four values:
-            let (base, base_sup, base_findings) = match &step1 {
-                Some((d, _, s, f)) => (d, s, f.as_slice()),
-                None => (&doc0, &a.sup, findings0.as_slice()),
+    // :146-157 — the step-1 tuple has four values, and model_windows gets the Prose of the doc it plans on:
+            let (base, base_prose, base_sup, base_findings) = match &step1 {
+                Some((d, p, s, f)) => (d, p, s, f.as_slice()),
+                None => (&doc0, &prose0, &a.sup, findings0.as_slice()),
             };
+            let m = model_windows(
+                base,
+                base_prose,
+                base_sup.frozen_ranges(),
+                base_findings,
+                &a.source,
+                rw,
+                seed,
+            )?;
     // :162-170 — step 2 keeps each pass's Prose with its Document:
             if m.applied.is_empty() {
                 step1.map(|(d, p, _, f)| (d, p, f))
@@ -925,15 +1089,41 @@ fn detect_in(text: Arc<str>, source: &Source) -> Result<Detected, Error> {
     // … FileResult { …, metrics, metrics_before: Some(metrics_before) }
 ```
 
+`model_windows` (lines 212-227) gains `prose: &text::Prose` after `doc` and passes it on, so planning reads the
+segmentation of the pass that produced `doc` and never rescans (§5, architecture §4.11):
+
+```rust
+fn model_windows(
+    doc: &Document,
+    prose: &text::Prose,
+    frozen: &[Range<usize>],
+    findings: &[Finding],
+    source: &Source,
+    rw: &mut engine::LazyRewriter<'_>,
+    seed: u32,
+) -> Result<ModelStep, Error> {
+    // … lines 220-226 unchanged …
+    for plan in windows(doc, prose, findings, frozen, s) {
+        // … unchanged …
+    }
+    Ok(step)
+}
+```
+
 `accept` destructures `let (_, _, _, after) = detect_in(candidate, source)?;` (line 283). Every candidate pass
-builds one `Prose`, never one per rule (NFR-2). The test helpers that build a `FileResult` literal add
+builds one `Prose`, never one per rule or per window (NFR-2). A candidate is a new document pass, so its own `Prose`
+is legitimate (architecture §4.11). The test helpers that build a `FileResult` literal add
 `metrics: Counts::default(), metrics_before: None` (`tests/write.rs:25`, `tests/report.rs:63, 242`).
 
 **Design notes:**
 
 - When the whole-document check discards every edit, `final_prose` is `prose0`, so `metrics == metrics_before`
   (architecture §7.2).
-- `prose0.counts` is cloned before `prose0` can move, so there is no borrow across the match.
+- `prose0.counts` is cloned before `prose0` can move, so there is no borrow across the match. `base_prose` borrows
+  `prose0` or the step-1 `Prose` only for the `model_windows` call, which ends before step 3 moves `prose0`.
+- Which `Prose` pairs with which `Document`: `doc0` with `prose0` (from `analyse`), each `detect_in` result with its
+  own. The pairing is positional in the `Detected` tuple, so no call site can mix them. `Prose::counts` and
+  `Prose::tags` debug-assert the source length (§9).
 
 ---
 
@@ -1362,51 +1552,291 @@ fn calibration_corpus_is_licensed_and_measurable() {
 
 ## 20. SLP001 wordiness and nominalisation rows
 
-**File:** `src/rules/builtin/slp001_ai_vocabulary_replaceable.rs` (changed at lines 1-4, 9-27, 43-49), `fixtures/rules/SLP001/positive.md`, `fixed.md`
+**File:** `src/rules/builtin/slp001_ai_vocabulary_replaceable.rs` (changed at lines 1-4, 6-7, 9-27, 43-49, 62-79), `fixtures/rules/SLP001/positive.md`, `fixed.md`, `tests/rules_fixtures.rs` (`safe_fix_contexts_grammatical`, lines 303-356)
 **Component:** §4.9 Rule integration, row SLP001 (ADR-08, **Proposed**, see OD-1)
-**Implements:** FR-5.1, FR-5.2, FR-5.3, FR-5.5, FR-11.2
+**Implements:** FR-5.1, FR-5.2, FR-5.3, FR-5.5, FR-11.2, D-10
 
-Written for OD-1 option (a), the ADR-08 recommendation. If Brad picks (b), the rows below move unchanged into a new
-default-off Safe rule (see OD-1).
+Written for OD-1 option (a), the ADR-08 recommendation. If Brad picks (b), the rows, the guard and the tests below
+move unchanged into a new default-off Safe rule (see OD-1). The guard is needed under either option.
 
 Rows are appended to `ENTRIES` (line 9), each inflection explicit (D-9). Every row's replacement passes the Phase 3
 invariants: no row adds or removes a modal or a negation, so FR-6.6 cannot fail on them (DQ-17). No new `None` row is
-added, so the table adds no model-eligible findings (FR-10.3, DQ-17). FR-5.3 still holds as a rule for rows: a row
-whose replacement is not certain must be `None` or stay out.
+added, so the table adds no model-eligible findings (FR-10.3, DQ-17).
 
-| Phrase rows (→ replacement) |
-|-----------------------------|
-| `make a decision` → `decide`, `makes a decision` → `decides`, `made a decision` → `decided`, `making a decision` → `deciding` |
-| `reach a conclusion` → `conclude`, `reaches a conclusion` → `concludes`, `reached a conclusion` → `concluded`, `reaching a conclusion` → `concluding` |
-| `take into consideration` → `consider`, `takes into consideration` → `considers`, `took into consideration` → `considered`, `taking into consideration` → `considering`, `taken into consideration` → `considered` |
-| `take into account` → `consider`, `takes into account` → `considers`, `took into account` → `considered`, `taking into account` → `considering`, `taken into account` → `considered` |
-| `give consideration to` → `consider`, `gives consideration to` → `considers`, `gave consideration to` → `considered`, `giving consideration to` → `considering`, `given consideration to` → `considered` |
-| `conduct an analysis of` → `analyze`, `conducts an analysis of` → `analyzes`, `conducted an analysis of` → `analyzed`, `conducting an analysis of` → `analyzing` |
-| `perform an analysis of` → `analyze`, `performs an analysis of` → `analyzes`, `performed an analysis of` → `analyzed`, `performing an analysis of` → `analyzing` |
-| `conduct an investigation into` → `investigate`, `conducts an investigation into` → `investigates`, `conducted an investigation into` → `investigated`, `conducting an investigation into` → `investigating` |
-| `provide assistance to` → `help`, `provides assistance to` → `helps`, `provided assistance to` → `helped`, `providing assistance to` → `helping` |
-| `make an attempt to` → `try to`, `makes an attempt to` → `tries to`, `made an attempt to` → `tried to`, `making an attempt to` → `trying to` |
-| `has a tendency to` → `tends to`, `have a tendency to` → `tend to`, `had a tendency to` → `tended to` |
-| `is in agreement with` → `agrees with`, `are in agreement with` → `agree with`, `was in agreement with` → `agreed with`, `were in agreement with` → `agreed with` |
-| `due to the fact that` → `because`, `owing to the fact that` → `because`, `in light of the fact that` → `because` |
-| `despite the fact that` → `although`, `in spite of the fact that` → `although` |
-| `at this point in time` → `now`, `at the present time` → `now`, `in the near future` → `soon` |
-| `in the event that` → `if`, `until such time as` → `until`, `prior to` → `before` |
-| `for the purpose of` → `for`, `with the exception of` → `except`, `in close proximity to` → `near` |
-| `a sufficient number of` → `enough`, `on a daily basis` → `daily`, `on a regular basis` → `regularly` |
+A Safe replacement must hold in every context the match can occur in (D-10). `WordList` matches whole words only
+(`src/rules/helpers.rs:71-75`): it does not look at the words around a match. So every row is one of three kinds.
+**Context-free** rows hold wherever they match. **Guarded** rows hold only when a check on the neighbouring word
+passes. On a failed guard the match is dropped: no finding and no fix. **Omitted** rows have no guard that this
+phase's mechanisms can express, so they stay out (FR-5.3).
 
-The comment (lines 1-4) and `explain` (lines 43-45) widen to say the rule covers padded verbs, nominalisations
-("make a decision") and padded phrases ("due to the fact that"), each inflection fixed separately. `positive.md`
-gains a paragraph that uses every new phrase once in a grammatical sentence. `fixed.md` gains the same paragraph
-with the replacements, and that text is grammatical (FR-5.2). `fix_is_idempotent_over_all_fixtures`
-(`tests/rules_fixtures.rs:526`) covers FR-5.5. No replacement contains a phrase of the table.
+| Kind | Phrase rows (→ replacement) |
+|------|-----------------------------|
+| guarded: noun-final | `make a decision` → `decide`, `makes a decision` → `decides`, `made a decision` → `decided`, `making a decision` → `deciding` |
+| guarded: noun-final | `reach a conclusion` → `conclude`, `reaches a conclusion` → `concludes`, `reached a conclusion` → `concluded`, `reaching a conclusion` → `concluding` |
+| context-free | `take into consideration` → `consider`, `takes into consideration` → `considers`, `took into consideration` → `considered`, `taking into consideration` → `considering`, `taken into consideration` → `considered` |
+| context-free | `take into account` → `consider`, `takes into account` → `considers`, `took into account` → `considered`, `taking into account` → `considering`, `taken into account` → `considered` |
+| context-free | `give consideration to` → `consider`, `gives consideration to` → `considers`, `gave consideration to` → `considered`, `giving consideration to` → `considering`, `given consideration to` → `considered` |
+| context-free | `conduct an analysis of` → `analyze`, `conducts an analysis of` → `analyzes`, `conducted an analysis of` → `analyzed`, `conducting an analysis of` → `analyzing` |
+| context-free | `perform an analysis of` → `analyze`, `performs an analysis of` → `analyzes`, `performed an analysis of` → `analyzed`, `performing an analysis of` → `analyzing` |
+| context-free | `conduct an investigation into` → `investigate`, `conducts an investigation into` → `investigates`, `conducted an investigation into` → `investigated`, `conducting an investigation into` → `investigating` |
+| context-free | `provide assistance to` → `help`, `provides assistance to` → `helps`, `provided assistance to` → `helped`, `providing assistance to` → `helping` |
+| context-free | `make an attempt to` → `try to`, `makes an attempt to` → `tries to`, `made an attempt to` → `tried to`, `making an attempt to` → `trying to` |
+| context-free | `has a tendency to` → `tends to`, `have a tendency to` → `tend to`, `had a tendency to` → `tended to` |
+| context-free | `is in agreement with` → `agrees with`, `are in agreement with` → `agree with`, `was in agreement with` → `agreed with`, `were in agreement with` → `agreed with` |
+| guarded: not after "be" | `due to the fact that` → `because`, `owing to the fact that` → `because`, `in light of the fact that` → `because`, `despite the fact that` → `although`, `in spite of the fact that` → `although` |
+| guarded: noun-final | `at this point in time` → `now`, `at the present time` → `now`, `in the near future` → `soon`, `on a daily basis` → `daily`, `on a regular basis` → `regularly` |
+| context-free | `until such time as` → `until`, `prior to` → `before`, `for the purpose of` → `for`, `with the exception of` → `except`, `in close proximity to` → `near` |
+| **omitted** | `a sufficient number of` → `enough`: "There is a sufficient number of seats." would become "There is enough seats." (agreement). `in the event that` → `if`: "We met in the event that ran in May." would become "We met if ran in May." (relative clause) |
+
+The guard is two checks, keyed by the matched phrase. The source file keeps them beside `ENTRIES`. The noun-final
+check reads the pass's segmentation (`ctx.prose`, §10), so it sees the whole sentence the noun ends in. The "the fact
+that" check reads the block text, as before.
+
+```rust
+use std::ops::Range;
+
+use crate::doc::BlockText;
+use crate::rules::helpers::WordList;
+use crate::rules::{Family, Finding, FixClass, Rule, RuleCode, RuleCtx, RuleMeta, Severity};
+use crate::text::{Segments, Word};
+
+/// Noun-final rows: the noun that ends the phrase, the words that may come right after it, and whether the phrase
+/// may open its sentence before a comma (the adverbial rows only). See [`noun_final_allows`] (Gap 2, D-10).
+static NOUN_FOLLOW: &[(&str, &[&str], bool)] = &[
+    ("basis", CLAUSE, true),
+    ("conclusion", CLAUSE, false),
+    ("decision", DECISION, false),
+    ("future", CLAUSE, true),
+    ("time", CLAUSE, true),
+];
+
+/// Subordinators that open an adverbial clause or phrase on the verb, never a modifier of the noun. "and", "or",
+/// "but", "as", "with", "for", "in", "at", "by", "so" and "when" are absent: each can join or modify the noun
+/// ("made a decision and a plan", "a decision as bold as theirs", "a decision with consequences", "at this point in
+/// time when costs rose"), and "that" can open a relative clause ("made a decision that surprised us").
+static CLAUSE: &[&str] = &["after", "although", "because", "before", "if", "though", "unless", "until"];
+
+/// [`CLAUSE`] plus the complements "decide" takes with the noun's meaning: "a decision about/on X" = "decide about/on
+/// X", "a decision to leave" = "decide to leave". "conclusion" gets no such words: "reached a conclusion about the
+/// data" → "concluded about the data" is not the same claim.
+static DECISION: &[&str] =
+    &["about", "after", "although", "because", "before", "if", "on", "though", "to", "unless", "until"];
+
+/// A last word that makes the follow word open a relative clause on the deleted noun: "made a decision about which."
+static RELATIVE: &[&str] = &["which", "whom", "whose"];
+
+/// A last word that makes "to" a preposition on the noun, not an infinitive marker: "made a decision to them" →
+/// "decided to them". A capitalised last word after "to" ("to Paris") is refused too.
+static NOT_AFTER_TO: &[&str] = &[
+    "a", "an", "her", "him", "his", "it", "its", "me", "my", "our", "that", "the", "their", "them", "these", "this",
+    "those", "us", "you", "your",
+];
+
+/// Subject pronouns that open a main clause after a fronted adverbial row: "At this point in time, we stop."
+static SUBJECT: &[&str] = &["he", "i", "it", "she", "they", "we", "you"];
+
+/// Characters that may stand between the last accounted-for word and the end of the sentence.
+static CLOSERS: &[char] = &['.', '!', '?', '"', '\'', ')', '\u{2019}', '\u{201D}'];
+
+/// Forms of "be" that may not precede a "… the fact that" row: "The delay is due to the fact that we left." would
+/// become "The delay is because we left."
+static BE_FORMS: &[&str] = &["am", "are", "be", "been", "being", "is", "was", "were"];
+
+/// Whether a noun-final match at source range `m` of `src` may be reported and fixed (Gap 2, D-10); `true` for any
+/// other row. The replacement deletes the noun and its verb, so every word after the noun in its sentence (from the
+/// pass's segmentation) must be accounted for. The sentence must take one of three shapes, and anything else drops the
+/// match:
+/// 1. the noun ends the sentence: only [`CLOSERS`] follow it ("We will ship in the near future.");
+/// 2. exactly two words follow, separated by spaces only, then only [`CLOSERS`]: a word from the noun's list, then one
+///    word that is not a relative pronoun, and after "to" a lowercase word that is not in [`NOT_AFTER_TO`] ("They made
+///    a decision to leave.");
+/// 3. an adverbial row opens the sentence, then a comma and a subject pronoun ("At this point in time, we stop."). The
+///    replacement is itself an adverbial and the main clause has its own subject, so nothing after the comma depends
+///    on the deleted noun.
+/// No other word after the noun is allowed, so a coordinated, compared or appended phrase ("… to leave and a plan to
+/// return") is refused however it is joined: there is no room for it (review round 3).
+fn noun_final_allows(src: &str, seg: &Segments, m: &Range<usize>) -> bool {
+    let phrase = src[m.clone()].to_ascii_lowercase();
+    let last = phrase.split_whitespace().next_back().unwrap_or_default();
+    let Some(&(_, follow, fronted)) = NOUN_FOLLOW.iter().find(|(noun, _, _)| *noun == last) else {
+        return true;
+    };
+    let Some(noun) = seg.word_before(m.end).filter(|&i| seg.words[i].range.end == m.end) else {
+        return false;
+    };
+    let Some(sentence) = seg.sentence_of(noun).and_then(|i| seg.sentences.get(i)) else {
+        return false;
+    };
+    let tail = &seg.words[noun + 1..sentence.words.end as usize];
+    let text = |w: &Word| src[w.range.clone()].to_lowercase();
+    let spaces = |r: Range<usize>| src[r].chars().all(char::is_whitespace);
+    let closes = |from: usize| src[from..sentence.range.end].chars().all(|c| CLOSERS.contains(&c));
+    match tail {
+        [] => closes(m.end),
+        [w1, w2] if follow.contains(&text(w1).as_str()) => {
+            let (word, then) = (text(w1), text(w2));
+            spaces(m.end..w1.range.start)
+                && spaces(w1.range.end..w2.range.start)
+                && closes(w2.range.end)
+                && !RELATIVE.contains(&then.as_str())
+                && !(word == "to"
+                    && (NOT_AFTER_TO.contains(&then.as_str())
+                        || !src[w2.range.clone()].starts_with(|c: char| c.is_lowercase())))
+        }
+        [w1, ..] if fronted => {
+            seg.word_at(m.start).is_some_and(|i| seg.words[i].sentence_initial)
+                && src[m.end..w1.range.start].trim() == ","
+                && SUBJECT.contains(&text(w1).as_str())
+        }
+        _ => false,
+    }
+}
+
+/// Whether a "… the fact that" match at text range `m` of `text` (a `BlockText`'s text) may be reported and fixed:
+/// not after a form of "be". `true` for any other row.
+fn fact_that_allows(text: &str, m: Range<usize>) -> bool {
+    if !text[m.clone()].to_ascii_lowercase().ends_with("the fact that") {
+        return true;
+    }
+    let before = text[..m.start].trim_end();
+    let start = before
+        .char_indices()
+        .rev()
+        .take_while(|(_, c)| c.is_alphabetic() || *c == '\'' || *c == '\u{2019}')
+        .last()
+        .map_or(before.len(), |(i, _)| i);
+    let prev = before[start..].to_lowercase().replace('\u{2019}', "'");
+    let contracted_be = ["'s", "'re", "'m"].iter().any(|s| prev.ends_with(s));
+    !(BE_FORMS.contains(&prev.as_str()) || contracted_be)
+}
+
+/// Both guards for a source range `WordList::find` returned. `false` when the range has no text offset. Rows that are
+/// neither noun-final nor "the fact that" rows always pass, so the 17 existing rows behave as today.
+fn allowed(ctx: &RuleCtx<'_>, bt: &BlockText, src: &Range<usize>) -> bool {
+    let in_text = match (bt.to_text(src.start), bt.to_text(src.end)) {
+        (Some(s), Some(e)) => fact_that_allows(&bt.text, s..e),
+        _ => false,
+    };
+    in_text && noun_final_allows(&ctx.doc.src, ctx.prose.segments(), src)
+}
+
+impl Rule for AiVocabularyReplaceable {
+    // meta() unchanged
+
+    fn check(&self, ctx: &RuleCtx<'_>, out: &mut Vec<Finding>) {
+        for bt in ctx.blocks() {
+            for (range, replacement) in self.list.find(&bt) {
+                if !allowed(ctx, &bt, &range) {
+                    continue; // Gap 2: a guarded row in a context it cannot prove; reported nowhere, fixed never
+                }
+                // … message, fix and push exactly as lines 65-76 …
+            }
+        }
+    }
+}
+```
+
+`BlockText::to_text` is §3's (Phase 1b) and `RuleCtx.prose` is §10's (Phase 1), so both exist before this phase.
+`Segments::word_before`, `word_at` and `sentence_of` and the public `words`/`sentences` fields are §4's; `Word` is
+re-exported from `crate::text` (§9). `noun_final_allows` works in source bytes because `WordList::find` and
+`Segments` both do (`src/rules/helpers.rs:37-65`, §4). The comment (lines 1-4) and `explain` (lines 43-45) widen to
+say the rule covers padded verbs, nominalisations ("make a decision") and padded phrases ("due to the fact that"),
+each inflection fixed separately, and that a phrase is left alone where its replacement might not fit ("a decision
+tree", "a decision to leave and a plan to return").
+
+**Fixtures and tests** (FR-5.2, FR-5.5, D-10):
+
+- `positive.md` gains a paragraph that uses every new phrase once in a grammatical sentence, each guarded row in a
+  context its guard admits (one sentence per guarded phrase, in one of the three shapes). `fixed.md` gains the same
+  paragraph with the replacements, and that text is grammatical (FR-5.2).
+- `negative.md` gains the guard counter-contexts, one sentence each, so `slp001_negative_silent` asserts they give no
+  finding (the list `GUARD_COUNTER_CONTEXTS` below, twenty sentences). The seven of round 1: "We make a decision
+  tree.", "They made a decision table.", "We made a decision that surprised us.", "The delay is due to the fact that
+  we left.", "It's due to the fact that we left.", "There is a sufficient number of seats." and "We met in the event
+  that ran in May." (the last two exercise the omitted rows: no row matches). The six of round 2: "We reached a
+  conclusion with which everyone agreed.", "We made a decision about which everyone complained.", "We made a decision
+  with consequences.", "We made a decision and a plan.", "We made a decision to the contrary." and "At the present
+  time and place we stop.". The seven of round 3, each a word after a complement that the old two-word lookahead never
+  saw: "We made a decision to leave and a plan to return." (the review's input), "We made a decision to leave rather
+  than a plan to stay.", "We reached a conclusion before noon and a deal after lunch.", "We meet on a daily basis until
+  June and a weekly basis after.", "We made a decision, a bold one.", "We made a decision, and a plan." and "Making a
+  decision, we found it hard." (a fronted verb row: "it" can refer to the deleted noun).
+- `safe_fix_contexts_grammatical` (`tests/rules_fixtures.rs:303-356`) gains `fixed` cases `(1, "We make a decision
+  about it.\n", "We decide about it.\n")`, `(1, "They made a decision to leave.\n", "They decided to leave.\n")`,
+  `(1, "We reached a conclusion before noon.\n", "We concluded before noon.\n")`, `(1, "At this point in time, we
+  stop.\n", "Now, we stop.\n")` and `(1, "We stayed due to the fact that it rained.\n", "We stayed because it
+  rained.\n")`. Its `unchanged` list is not the place for the counter-contexts: it asserts a finding *with no fix*
+  exists (lines 350-354), and a failed guard reports nothing.
+- A new test `slp001_guard_drops_unprovable_contexts` in `tests/rules_fixtures.rs` holds the twenty counter-contexts
+  as `const GUARD_COUNTER_CONTEXTS: &[&str]` and asserts, for each, `findings(1, &parse(src))` is empty and
+  `apply_fixes(1, src) == src` (helpers at lines 53-76). It names each input in its failure message, so a regression
+  points at the row.
+- `fix_is_idempotent_over_all_fixtures` (`tests/rules_fixtures.rs:526`) covers FR-5.5. No replacement contains a
+  phrase of the table.
 
 **Design notes:**
 
+- Why drop the match rather than keep it without a fix: a Safe finding with no fix selects a model window
+  (`src/engine/window.rs:116`), so fix-less guarded rows would raise the FR-10 residual. That is the model-reliance
+  contract the review warned against (Gap 2). Dropping only costs recall in contexts the guard cannot prove.
+- Why the guard reads the whole sentence (review round 3). The replacement deletes the noun and the verb that
+  governed it ("made a decision" → "decided"). Any later word in the sentence may depend on either: a compound noun, a
+  modifier or a relative clause depends on the noun, and a coordinated or compared noun phrase ("… to leave and a plan
+  to return", "… rather than a plan to stay") depends on the verb. Rounds 1 and 2 each refused one more such word with
+  a lookahead of one or two words, and each time a dependent further right got through. No finite blacklist of
+  joining words proves there is none ("and", "or", "but", "rather than", "as well as", "along with", "instead of",
+  a bare comma …). So the guard now works the other way round: it accepts only sentences in which every word after the
+  noun is accounted for by one of three closed shapes. Shape 1 leaves nothing after the noun. Shape 2 leaves exactly a
+  listed subordinator or complement word and one more word: one word cannot hold a second noun phrase together with
+  the word that would join it to the verb. Shape 3 is a fronted adverbial whose replacement is also an adverbial, with
+  a subject pronoun opening the main clause; that clause has its own subject and verb, and an adverbial ("now",
+  "daily", "soon") has nothing that a later word could refer back to. The verb rows ("decision", "conclusion") do not
+  get shape 3: "Making a decision, we found it hard." → "Deciding, we found it hard." loses the antecedent of "it".
+- The sentence comes from `Segments` (§4), the crate's one definition of sentences, so an abbreviation or a lowercase
+  continuation after a period ("until Jan. 5 and a weekly basis after") stays inside the sentence and makes it too
+  long for shape 2. The spaces and closers checks read the source bytes between the words, so a comma, a dash, a colon,
+  inline code, emphasis markers, a hyphen ("decision-making") or a block-quote continuation prefix anywhere after the
+  noun drops the match. Only shape 3 admits a comma, and only one comma directly after a sentence-opening adverbial.
+- The follow lists keep the round-2 audit: a word stays only if it cannot start a modifier of the noun (`CLAUSE`:
+  subordinators), or if the noun's modifier and the verb's complement mean the same thing (`DECISION` adds `about`,
+  `on`, `to`). `whether` is gone: it needs at least two more words ("whether to go"), which shape 2 cannot hold. The
+  last word is checked as in round 2: a relative pronoun means a relative clause on the deleted noun, and after "to" a
+  determiner, an object pronoun or a capitalised word means "to" is a preposition, not an infinitive marker.
+  `conclusion` keeps no complement word: "concluded about the data" is not "reached a conclusion about the data".
+- The cost is recall only, and every lost case still goes to the model only if another rule selects it: a guarded
+  row in an unproven context gives no finding. Lost by round 3: "We made a decision on the budget.", "… whether to
+  go.", "… because we had to.", "We made a decision, which surprised us." and "We will make a decision soon." Kept:
+  "We make a decision.", "… about it.", "They made a decision to leave.", "We reached a conclusion before noon.", "At
+  this point in time, we stop.", "We meet on a daily basis until June." and "We will ship in the near future.".
+  `consideration` and `account` are not noun-final: "take into account" and "take into consideration" need an object,
+  so "take into account balance sheets" parses only as "consider balance sheets". Rows ending in `of`, `to`, `into`,
+  `with` or `as` cannot be followed by a compound noun of their own.
+- "The fact that" rows: after a form of "be" the replacement turns a predicate into "is because" or "is although".
+  The guard reads the word before, contractions (`'s`, `'re`, `'m`, ASCII or ’) included. The complement reading of
+  "the fact that" is the common one. A relative reading ("despite the fact that you cited") is rare, and the
+  replacement still reads as a concession. This check is unchanged in round 3 apart from moving into its own function.
 - Rejected candidates (FR-5.3) and why: `the majority of` → `most` breaks on "the majority of the time". `have the
   ability to` → `can` breaks after "to" and adds a modal. `is able to` → `can` adds a modal. `in the process of`
   needs a deletion with its trailing space, which `WordList`'s whole-word match cannot express
-  (`src/rules/helpers.rs:71-75`).
+  (`src/rules/helpers.rs:71-75`). `a sufficient number of` and `in the event that` are omitted as the table says.
+- Compile check (round-3 revision): `noun_final_allows` with `NOUN_FOLLOW`, `CLAUSE`, `DECISION`, `RELATIVE`,
+  `NOT_AFTER_TO`, `SUBJECT` and `CLOSERS` exactly as above was built in a scratch crate outside the worktree, over a
+  one-block stand-in for §4's `Segments` (UAX #29 sentence bounds and `unicode_word_indices` from
+  `unicode-segmentation` 1.13.3, the crate's pinned version, with §4's `word_before`, `word_at` and `sentence_of`
+  bodies). `cargo test` and `cargo clippy --all-targets -- -D warnings` were clean. It rejects every noun-final input
+  of `GUARD_COUNTER_CONTEXTS`, plus "We meet on a daily basis until Jan. 5 and a weekly basis after.", "We made a
+  decision about it and a plan for it.", "We made a decision to leave, and a plan to return.", "We made a decision to
+  them.", "We made a decision to Paris.", "We made a decision — a bold one.", "We made a decision: a plan.", "We made a
+  decision `now`.", "At the present time, place and date matter.", "We will meet, at this point in time, we said.",
+  "A make a decision-making step.", "At this point in time we stop.", "We made a decision on which everything
+  hinged.", "We made a decision after which we left.", "We made a decision as bold as theirs.", "We reached a
+  conclusion to the story.", "We reached a conclusion about the data.", "At this point in time when costs rose, we
+  stopped." and the five lost cases above. It accepts the seven kept cases above, plus "We reached a conclusion" at
+  the block end, "Did they make a decision?", "(They made a decision.)" and "We made a decision. And then we left.".
+  `fact_that_allows` is the round-2 body, moved unchanged into its own function; its accepted and rejected inputs are
+  as before ("We stayed due to the fact that it rained.", "Due to the fact that it rained, we stayed." accepted; "The
+  delay is due to the fact that we left.", "It's due to the fact that we left.", "It’s due to the fact that we left."
+  rejected).
 
 ---
 
@@ -1501,7 +1931,8 @@ pub fn is_stop_word(lower: &str) -> bool {
     STOP_WORDS.binary_search(&lower).is_ok()
 }
 
-/// A capitalised word that is not a name candidate: [`NOT_NAMES`], or a stop word, modal or hedge in any case.
+/// A capitalised word that is not a name candidate: [`NOT_NAMES`], or a stop word, modal or hedge in any case. The
+/// verifier consults it for rule-origin edits only (§23, written for OD-2 option (a)).
 pub fn is_common_capitalised(word: &str) -> bool {
     if NOT_NAMES.contains(&word) {
         return true;
@@ -1536,7 +1967,7 @@ use crate::types::{ProposalOrigin, RuleCode};
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(super) struct Meaning {
     pub(super) negations: u32,
-    /// Capitalised, non-sentence-initial words that are not common words (FR-6.2's proxy).
+    /// Capitalised, non-sentence-initial words (FR-6.2's proxy); common words skipped only when `skip_common`.
     pub(super) proper: BTreeMap<String, u32>,
     pub(super) modals: BTreeMap<String, u32>,
 }
@@ -1551,8 +1982,9 @@ fn bump(map: &mut BTreeMap<String, u32>, key: &str) {
 
 /// `initial_at_start`: whether the text's first word starts a sentence in the document. Inside the text a word is
 /// sentence-initial when the nearest non-space text before it (closing quotes and brackets skipped) ends in `.`,
-/// `!` or `?`.
-pub(super) fn meaning(text: &str, initial_at_start: bool) -> Meaning {
+/// `!` or `?`. `skip_common`: whether capitalised common words ([`lexicon::is_common_capitalised`]) are left out of
+/// the proper-noun multiset. `verify::edit` sets it for rule-origin edits only (OD-2 option (a)).
+pub(super) fn meaning(text: &str, initial_at_start: bool, skip_common: bool) -> Meaning {
     let mut m = Meaning::default();
     let mut prev_end: Option<usize> = None;
     for (at, word) in text.unicode_word_indices() {
@@ -1564,7 +1996,8 @@ pub(super) fn meaning(text: &str, initial_at_start: bool) -> Meaning {
         if let Some(modal) = lexicon::modal_of(word) {
             bump(&mut m.modals, modal);
         }
-        if !initial && word.chars().next().is_some_and(char::is_uppercase) && !lexicon::is_common_capitalised(word) {
+        let common = skip_common && lexicon::is_common_capitalised(word);
+        if !initial && word.chars().next().is_some_and(char::is_uppercase) && !common {
             bump(&mut m.proper, word);
         }
         prev_end = Some(at + word.len());
@@ -1589,7 +2022,7 @@ pub(super) fn negation_allowance(origin: ProposalOrigin, resolves: &[RuleCode]) 
 mod meaning;
 
 use crate::text::segment;
-use crate::types::{Proposal, RuleCode};
+use crate::types::{Proposal, ProposalOrigin, RuleCode};
 
 pub enum Check {
     // … Numbers … Document unchanged …
@@ -1613,7 +2046,13 @@ pub fn edit(
 ) -> Result<Verified<Proposal>, Rejection> {
     // … existing checks through Terms (lines 71-105) …
     let initial = starts_at_sentence(doc, r.start);
-    let (mb, ma) = (meaning::meaning(original, initial), meaning::meaning(&p.replacement, initial));
+    // OD-2 (a): the common-word exemption covers the deterministic Safe fixes the FR-6.6 gate proves; a model
+    // rewrite gets FR-6.2's literal proxy (only sentence-initial words skipped).
+    let skip_common = matches!(p.origin, ProposalOrigin::Rule(_));
+    let (mb, ma) = (
+        meaning::meaning(original, initial, skip_common),
+        meaning::meaning(&p.replacement, initial, skip_common),
+    );
     let allowance = meaning::negation_allowance(p.origin, resolves);
     if ma.negations.saturating_add(allowance) < mb.negations {
         return Err(reject(
@@ -1652,12 +2091,19 @@ in `tests/verify_edits.rs:29, 231, 246`, `tests/rules_fixtures.rs:73` and `tests
 - Walking the existing safe fixes through the checks:
   - SLP008/SLP016 lead-in deletion (`It is worth noting that t` → `T`): the first word on each side is
     sentence-initial, so the proxy ignores it (FR-6.2).
-  - SLP009 `May Potentially` → `May` (`tests/rules_fixtures.rs:271-277`): "May" is a modal and "Potentially" a hedge,
-    so both are common words and the proxy multisets are equal. The modal multiset is `{may}` on both sides.
+  - SLP009 `May Potentially` → `May` (`tests/rules_fixtures.rs:271-277`): a rule-origin edit, so common words are
+    skipped. "May" is a modal and "Potentially" a hedge, so both are common words and the proxy multisets are equal.
+    The modal multiset is `{may}` on both sides.
   - SLP017 emoji deletions contain no word.
   - SLP001 rows replace lower-case words. A mid-sentence all-caps row (`We UTILIZE it`) is now rejected as SLP901,
     loudly (DQ-10).
 - The FR-6.6 regression (§36.6) checks every Safe fixture mechanically.
+- Scope of the common-word exemption (review Gap 11, OD-2). This section is written for OD-2's recommended option
+  (a): rule-origin edits skip capitalised common words, and model rewrites do not. So a model that turns "We watched
+  It and a robust sequel." into "We watched something and a sequel." is rejected with `Check::ProperNouns`, because
+  the non-initial "It" is in the original multiset and not in the rewrite. A model rewrite that only re-cases a
+  title-case common word ("Is" → "is" in a heading) is rejected too: loudly, as SLP901, and the bytes stay. Under
+  option (b) `skip_common` is `true` for every origin, the argument goes away, and the title example passes.
 
 ---
 
@@ -1865,8 +2311,8 @@ capitalised word is a proper noun only by guess, and so never certain.
 
 ## 27. `Prose::tags` (lazy, once per pass)
 
-**File:** `src/text/mod.rs` (changed: §9's struct), `src/rules/mod.rs` (new `#[cfg(test)] mod tests` at the end)
-**Component:** §4.8 Per-document context (ADR-02)
+**File:** `src/text/mod.rs` (changed: §9's struct), `src/rules/mod.rs` (new `#[cfg(test)] mod tests` at the end), `src/pipeline/mod.rs` (test-only records in `detect_in` and `model_windows`; new `#[cfg(test)] mod tests` at the end)
+**Component:** §4.8 Per-document context (ADR-02); §4.11 Pipeline (the behavioral NFR-2 test, architecture §11)
 **Implements:** FR-7.3, FR-7.4, NFR-2
 
 ```rust
@@ -1943,9 +2389,148 @@ mod tests {
 }
 ```
 
-With §6's two structural tests, `tagger::tag(` only inside `Prose::tags` and `Prose::new(` only in `detect_in` plus
-in-crate tests, this shows one tagging per document pass across a multi-window fix (NFR-2). See the PRD Deviation
-Notes.
+With §6's structural tests, `tagger::tag(` only inside `Prose::tags` and `Prose::new(` only in `detect_in` plus
+in-crate tests, these bound tagging to once per `Prose`. The behavioral proof across a multi-window fix (NFR-2, review
+Gap 9, deferred to this phase) is an in-crate pipeline test through the rewriter port, because the counters are
+`#[cfg(test)]`. `detect_in` and `model_windows` gain two test-only records:
+
+```rust
+// src/pipeline/mod.rs
+#[cfg(test)]
+use std::cell::RefCell;
+#[cfg(test)]
+use std::sync::atomic::Ordering;
+
+/// One detection pass, as `detect_in` saw it (NFR-2 test hook).
+#[cfg(test)]
+struct Pass {
+    text: Arc<str>,
+    blocks: usize,
+    scans: u32,
+    tag_runs: u32,
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Every detection pass this thread ran, in order.
+    static PASSES: RefCell<Vec<Pass>> = const { RefCell::new(Vec::new()) };
+    /// The block scans each `windows` call in `model_windows` ran.
+    static PLAN_SCANS: RefCell<Vec<u32>> = const { RefCell::new(Vec::new()) };
+}
+
+// detect_in, around §11's two lines:
+    #[cfg(test)]
+    let scans0 = text::segment::scans();
+    let prose = text::Prose::new(&d);
+    let findings = rules::detect(&d, &prose, &sup, &s.enabled(reg));
+    #[cfg(test)]
+    PASSES.with(|p| {
+        p.borrow_mut().push(Pass {
+            text: Arc::clone(&d.src),
+            blocks: d.blocks.len(),
+            scans: text::segment::scans() - scans0,
+            tag_runs: prose.tag_runs.load(Ordering::Relaxed),
+        });
+    });
+
+// model_windows, replacing `for plan in windows(doc, prose, findings, frozen, s) {` (§11):
+    #[cfg(test)]
+    let scans0 = text::segment::scans();
+    let plans = windows(doc, prose, findings, frozen, s);
+    #[cfg(test)]
+    PLAN_SCANS.with(|p| p.borrow_mut().push(text::segment::scans() - scans0));
+    for plan in plans {
+```
+
+```rust
+// src/pipeline/mod.rs
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use super::*;
+    use crate::config::{CliOverrides, ModelSettings, Resolver, WindowMode};
+    use crate::input::Format;
+    use crate::model::ResolvedModel;
+
+    /// Rewrites each sentence window's tell to plain wording, so every window improves and is applied.
+    struct Plain;
+    impl engine::Rewriter for Plain {
+        fn rewrite(&mut self, req: &engine::RewriteRequest<'_>) -> Result<String, Error> {
+            Ok(req
+                .window
+                .replace("plays a crucial role in", "helps")
+                .replace("plays a vital role in", "helps")
+                .replace("plays a pivotal role in", "helps")
+                .replace("serves as", "is"))
+        }
+    }
+    struct PlainFactory;
+    impl engine::RewriterFactory for PlainFactory {
+        fn open(&self, _: &ResolvedModel) -> Result<Box<dyn engine::Rewriter>, Error> {
+            Ok(Box::new(Plain))
+        }
+    }
+
+    /// NFR-2 / FR-7.3 (Gap 9): a sentence-mode fix with three windows in one paragraph. Each document pass — the
+    /// original, each candidate parsed for the improvement check, the final text — builds one `Prose`: it scans
+    /// each block once and tags at most once. Window planning scans nothing. The tool sentence (an SLP006 hit the
+    /// tagger declines, so a fix-less Safe finding) makes the original pass tag once; the final text has no
+    /// candidate left and is never tagged.
+    #[test]
+    fn multi_window_fix_analyses_each_pass_once() {
+        PASSES.with(|p| p.borrow_mut().clear());
+        PLAN_SCANS.with(|p| p.borrow_mut().clear());
+        let tmp = tempfile::tempdir().unwrap();
+        let model = tmp.path().join("model.gguf");
+        std::fs::write(&model, b"not a real model").unwrap();
+        let path = tmp.path().join("doc.md");
+        let mut settings = (*Resolver::new(CliOverrides::default(), None).unwrap().for_file(&path).unwrap()).clone();
+        settings.model.window = WindowMode::Sentence;
+        let ms = ModelSettings { path: Some(model), profile: Some("qwen3".into()), ..settings.model.clone() };
+        let text = "The cache plays a crucial role in builds and plays a vital role in tests. The index plays a \
+                    pivotal role in search and plays a crucial role in ranking. The tool serves as a bridge.\n";
+        let source = Source {
+            origin: Origin::File(path),
+            format: Format::Markdown,
+            text: Arc::from(text),
+            settings: Arc::new(settings),
+        };
+        let factory = PlainFactory;
+        let mut rw = engine::LazyRewriter::new(&factory, &ms).unwrap();
+        let both = Engines { rules: true, model: true };
+        let r = fix(analyse(source).unwrap(), both, Some(&mut rw), engine::DEFAULT_SEED).unwrap();
+        assert!(r.fixed.is_some(), "{:?}", r.findings);
+
+        let passes = PASSES.with(|p| p.take());
+        let plans = PLAN_SCANS.with(|p| p.take());
+        assert_eq!(plans, vec![0], "window planning rescanned a block");
+        // The original pass, three candidates and the final text: no step-1 pass (no safe fix applies).
+        assert_eq!(passes.len(), 5, "passes: {:?}", passes.iter().map(|p| &*p.text).collect::<Vec<_>>());
+        assert_eq!(&*passes[0].text, text);
+        for p in &passes {
+            assert_eq!(p.scans as usize, p.blocks, "a pass scanned a block twice: {:?}", p.text);
+            assert!(p.tag_runs <= 1, "a pass tagged twice: {:?}", p.text);
+        }
+        assert_eq!(passes[0].tag_runs, 1, "the SLP006 hit must tag the original pass");
+        assert_eq!(passes[4].tag_runs, 0, "the final text has no candidate and must not be tagged");
+    }
+}
+```
+
+**Design notes:**
+
+- Passes are told apart by order and text: the original text first, one candidate per accepted window
+  (`src/pipeline/mod.rs:278-283`), then the step-2 text (`:165-166`). A second `Prose` inside one pass would show as
+  `scans == 2 × blocks`, and a second tagging as `tag_runs == 2`, so the test fails on either. Separate candidates
+  are separate passes and are allowed (architecture §4.11).
+- The model file is a placeholder, as `tests/common/mod.rs` plants one: `model::resolve` only checks that
+  `model.path` is a file and `model.profile` is known (`src/model/mod.rs:59-83`). `Plain` never loads it.
+- `tempfile` is a normal dependency (`Cargo.toml:45`), and clippy allows `unwrap` in tests (`clippy.toml`).
+- The test depends on §28's lexicon pinning `tool` as ambiguous, which `tagger::tests::required_entries` asserts.
+  If the tagger ever fixes "The tool serves as a bridge." in step 1, the pass count changes and the assertion message
+  lists the passes.
+
 
 ---
 
@@ -2063,7 +2648,12 @@ severity do not change.
   The existing `"The tool serves as a bridge.\n"` stays in `unchanged`, because `tool` is ambiguous.
 
 **Phase 4 spike gate** (architecture §12): the tagger must mark at least one class certain on these positives and
-decline on every negative. If it cannot, this section is dropped and Phase 4 ships the tagger for Phase 5 only.
+decline on every negative. The gate is the first story of Phase 4, and it fails loudly: its test
+(`text_tagger::spike_slp006_classes`, §36.8) fails the build when no class passes. If it fails, the story records the
+classes tried and the fixtures that failed in its result, and the phase stops. It continues only
+when the tagger tables or rules are corrected and the spike passes, or when Brad records an explicit scope decision
+against FR-7.5–FR-7.8. This SPEC never drops the widening automatically, and Phase 5 does not start on a tagger-only
+Phase 4 without that decision.
 
 ---
 
@@ -2183,7 +2773,10 @@ and no modal (FR-8.5).
 
 The class becomes `FixClass::Safe`, with one param:
 `ParamSpec { name: "max_words", default: 3.0, min: 1.0, max: 10.0, help: "Most words X and Y may each have for the fix to apply" }`.
-The fix deletes the denied clause up to the repeated subject, so the second clause stands as written.
+The fix deletes the denied clause up to the repeated subject, so the second clause stands as written. That is
+claim-preserving only when X is *denied*. In "It's not only cheap, it's quick." the first clause asserts cheapness
+too ("not only" adds, it does not deny), so deleting it would lose a claim (review Gap 3, D-10). The template declines
+whenever X starts with a focus word of `ADDITIVE`.
 
 ```rust
 use std::ops::Range;
@@ -2196,6 +2789,17 @@ use crate::rules::{Family, Finding, FixClass, ParamSpec, Rule, RuleCode, RuleCtx
 
 const MAX_WORDS: &str = "max_words";
 
+/// Focus words that make "not X" additive rather than a denial: "not only cheap" and "not just cheap" assert
+/// cheapness. "even" is in the list because "not even X" is scalar (it can deny less than X), so deleting it is not
+/// provably neutral. Sorted; checked against the first word of X, case-folded (Gap 3).
+const ADDITIVE: &[&str] = &["even", "just", "merely", "only", "simply", "solely"];
+
+/// Whether X is a plain denial: its first word is not an [`ADDITIVE`] focus word.
+fn denies(x: &str) -> bool {
+    let first = x.split_whitespace().next().unwrap_or_default().to_lowercase();
+    ADDITIVE.binary_search(&first.as_str()).is_err()
+}
+
 /// FR-8.2's shape inside one sentence: subject + negated copula, X, a clause break that is not a sentence end, an
 /// optional "but", the same subject + copula. Captures 1, 2, 3 = first subject, X, second subject.
 const TEMPLATE: &str = r"(?i)\b(it|this|that)(?:['’]s not| is not| isn['’]t)\s+([^.!?\n,;:—–]{1,80}?)\s*(?:[,;:—–]|\s--?\s)\s*(?:but\s+)?(it|this|that)(?:['’]s| is)\b";
@@ -2207,6 +2811,9 @@ impl NotXButY {
         let (whole, s1, x, s2) = (c.get(0)?, c.get(1)?, c.get(2)?, c.get(3)?);
         if !s1.as_str().eq_ignore_ascii_case(s2.as_str()) {
             return None; // "This isn't X — it's Y" changes the subject
+        }
+        if !denies(x.as_str()) {
+            return None; // "It's not only cheap, it's quick" adds a claim; deleting the clause would lose it (Gap 3)
         }
         let max = ctx.param(MAX_WORDS);
         let x_words = x.as_str().unicode_words().count();
@@ -2245,8 +2852,9 @@ denies a claim nobody made before it states the real one. In one sentence, with 
 of at most `max_words` words each, the fix deletes the denied clause; otherwise no fix is attached and the model
 engine states Y directly." The example becomes `("It's not a bug, it's a feature.", "It's a feature.")`.
 
-`positive.md` gains the line "It's not a bug that we can fix in an hour, it's a feature." (X has 9 words, so the
-template declines). The fixed lines read:
+`positive.md` gains the lines "It's not a bug that we can fix in an hour, it's a feature." (X has 9 words, so the
+template declines) and "It's not only cheap, it's quick." (additive frame, so the template declines; the finding stays,
+fix-less, for the model). The fixed lines read:
 
 ```markdown
 It's a feature.
@@ -2256,10 +2864,24 @@ This isn't a framework — it's a mindset. That is a hope.
 It's not a rule. It's a habit.
 
 It's not a bug that we can fix in an hour, it's a feature.
+
+It's not only cheap, it's quick.
 ```
 
 The D-8 allowance accepts each fix (`isn't`/`not` dropped, allowance 1). The replaced bytes `It's not a bug, i` and
 the replacement `I` both start a sentence, so the proper-noun proxy sees no word, and no modal changes (FR-8.5).
+
+**Audit of what X may start with** (Gap 3's "any other words admitted at the start of X"). X is 1..=`max_words`
+lower-case words with no digit or protected run. Its first word falls into one of these groups. Determiners and
+nouns ("a bug", "the problem") are plain denials, so the fix applies. Hedges of the denial ("really", "exactly",
+"quite": "it's not really a bug, it's a feature") weaken "not" but still deny X, so the fix applies. Focus words
+(`ADDITIVE`) make the frame additive or scalar, so the fix declines. Other adverbs and adjectives ("cheap", "fast")
+are denied predicates, so the fix applies. "also" cannot start X grammatically after "not". The verifier cannot tell
+these groups apart, so `ADDITIVE` is the guard and the tests pin it.
+
+Compile check (this pass): `ADDITIVE`, `denies` and `TEMPLATE` were built in a scratch crate. On "It's not only
+cheap, it's quick.", "It's not just cheap, it's quick." and "It's not merely fast, it's cheap." the template captures
+X and `denies` returns false. On "It's not a bug, it's a feature." it returns true.
 
 ---
 
@@ -2304,7 +2926,8 @@ pub fn stem(word_lower: &str) -> Cow<'_, str> {
 }
 
 // (b) Otherwise, the in-tree suffix stripper: the first matching rule applies, then a final `e` is dropped when
-// at least 4 letters remain, so "make", "makes" and "making" meet at "mak".
+// at least 3 letters remain, so "make", "makes" and "making" meet at "mak", and "cache", "caches", "cached" and
+// "caching" at "cach".
 const SUFFIXES: &[(&str, &str, usize)] = &[
     ("sses", "ss", 2), ("ies", "y", 2), ("ing", "", 3), ("ed", "", 3), ("ly", "", 3), ("s", "", 3),
 ];
@@ -2321,7 +2944,7 @@ pub fn stem(word_lower: &str) -> Cow<'_, str> {
         }
     }
     match w.strip_suffix('e') {
-        Some(base) if base.chars().count() >= 4 => Cow::Owned(base.to_string()),
+        Some(base) if base.chars().count() >= 3 => Cow::Owned(base.to_string()),
         _ => w,
     }
 }
@@ -2329,6 +2952,10 @@ pub fn stem(word_lower: &str) -> Cow<'_, str> {
 
 **Design notes:**
 
+- Review Gap 8 (deferred to this story): with a 4-letter floor on the final-`e` drop, "make" stayed "make" while
+  "making" became "mak", so `inflections_meet` (§36.10) could not pass on the fallback. The floor is 3. The scratch
+  run checked that make/makes/making and cache/caches/cached/caching each share one stem under (b). Whichever body
+  ships, `inflections_meet` runs against it unchanged; the assertion is never weakened to fit a backend.
 - Choosing (a) adds `rust-stemmers` to `Cargo.toml` with an exact pin, the house style for every dependency
   (`Cargo.toml` `[dependencies]`), and adds `"rust_stemmers"` to an `only_in` test that permits it only in
   `src/text/stem.rs`.
@@ -2491,9 +3118,12 @@ file. Gates for the slice stage follow the phase order of §1–§35.
 | `segment::tests::word_lookup_helpers` | `word_before`, `word_at`, `sentence_of` on a two-sentence block, including an empty-word sentence |
 | `text_segment::word_count_equals_prose_words_on_every_fixture` | FR-1.3 — every `.md` under `fixtures/` and `eval/paragraphs/` |
 | `text_segment::random_input_never_panics` | architecture §8 errors — 500 xorshift-generated 200-char strings (Markdown punctuation, `OBJ`, `é`, newlines); word count still equals `prose_words` |
-| `text_segment::sentence_starts_match_window_sentences` | FR-1.4 — for each fixture paragraph, `sentence_starts` equals the bounds the sentence-mode window uses (through `windows` with `model.window = "sentence"` on a Model-class finding) |
+| `text_segment::sentence_span_equals_old_sentence_range` | FR-1.4 — on every `.md` under `fixtures/` and `eval/paragraphs/`, for every block and every word range, every empty range at a word start, and every range from one word's start to a later word's end in the same block, `Segments::sentence_span` equals a test-local verbatim copy of today's `sentence_range` (`src/engine/window.rs:241-277`, with `doc.continuation_prefix_len` for `mask::prefix_len`). The copy is written in the Phase 1b story before `sentence_range` is deleted |
+| `segment::tests::sentence_starts_is_the_cache` | FR-1.4 — `sentence_starts(b)` equals the bounds `sentence_span` uses: "It is. We go." gives `[0, 7]`; an unknown block gives `[0]` |
+| `engine::window::tests::planning_does_not_rescan` (§5) | NFR-2 (Gap 1) — `Prose::new` scans the one block once; `windows` over four Model findings in two sentences adds zero scans and plans two windows |
 
-Existing window and mask tests (`tests/engine.rs`) pass unmodified: the phase-1b gate (ADR-03).
+Existing window and mask tests (`tests/engine.rs`) pass with only the added `&prose` argument: the phase-1b gate
+(ADR-03).
 
 ### 36.2 Syllables and metrics
 
@@ -2551,6 +3181,9 @@ Existing window and mask tests (`tests/engine.rs`) pass unmodified: the phase-1b
 |------|----------|
 | `slp001_fix_matches` (existing, fixtures extended) | FR-5.1, FR-5.2 |
 | `slp001_every_row_in_positive` (new) | FR-5.2 — each `ENTRIES` phrase occurs in `positive.md`; reads the table through findings on `positive.md`, one per row |
+| `slp001_negative_silent` (macro, `negative.md` extended) | D-10 (Gap 2) — the twenty counter-contexts of §20 (`GUARD_COUNTER_CONTEXTS`) give no SLP001 finding |
+| `slp001_guard_drops_unprovable_contexts` (new) | D-10, FR-5.3 (Gap 2) — every sentence of `GUARD_COUNTER_CONTEXTS` (§20: the seven of round 1, the six of round 2 and the seven of round 3, among them "We made a decision to leave and a plan to return.", "We made a decision to leave rather than a plan to stay.", "We reached a conclusion before noon and a deal after lunch." and "Making a decision, we found it hard."): no finding, and a rules-only fix leaves each unchanged |
+| `safe_fix_contexts_grammatical` (extended) | FR-5.2 — "We make a decision about it." → "We decide about it."; "They made a decision to leave." → "They decided to leave."; "We reached a conclusion before noon." → "We concluded before noon."; "At this point in time, we stop." → "Now, we stop."; "We stayed due to the fact that it rained." → "We stayed because it rained." |
 | `fix_is_idempotent_over_all_fixtures` (existing) | FR-5.5 |
 | `slp022_positive_fires`, `slp022_negative_silent` (macro) | FR-5.4 |
 | `slp022_never_attaches_a_fix` (covered by `only_safe_rules_attach_fixes`) | FR-5.4, D-10 |
@@ -2567,7 +3200,8 @@ Existing window and mask tests (`tests/engine.rs`) pass unmodified: the phase-1b
 | `model_allowance_counts_window_findings` | D-8 — Model edit with `resolves = [SLP003]` may drop one, not two; `resolves = []` none |
 | `rejects_removed_proper_noun` | FR-6.2, FR-6.8 — "We use Redis here." → "We use it here." fails `Check::ProperNouns` |
 | `accepts_sentence_initial_capital_change` | FR-6.2 — SLP008-style "It is worth noting that t" → "T" passes |
-| `accepts_title_case_hedge_removal` | FR-6.2 — "May Potentially" → "May" passes |
+| `accepts_title_case_hedge_removal` | FR-6.2 — rule-origin (SLP009) "May Potentially" → "May" passes |
+| `rejects_model_removal_of_capitalised_common_word` | FR-6.2 (Gap 11, OD-2 (a)) — Model edit "We watched It and a robust sequel." → "We watched something and a sequel." fails `Check::ProperNouns` |
 | `rejects_changed_modal` | FR-6.3, FR-6.8 — "It must ship." → "It should ship." fails `Check::Modals` |
 | `accepts_modal_contraction` | FR-6.3 — "It will not ship." → "It won't ship." passes |
 | `rejected_new_check_is_slp901_with_name` (`tests/pipeline.rs`) | FR-6.4, FR-6.5, NFR-6 — forge an SLP001 fix that drops "not"; the result has SLP901 `rewrite rejected (negation)` and the original bytes |
@@ -2585,6 +3219,8 @@ fixture test also exercises the new checks.
 | Test | Verifies |
 |------|----------|
 | `window_codes_one_per_finding` | D-8, ADR-06 — two SLP003 findings in one paragraph give `codes` with two SLP003 entries |
+| existing `tests/engine.rs` window tests (only `&prose` added) | FR-1.4 — window ranges unchanged (Phase 1b gate) |
+| `pipeline::tests::multi_window_fix_analyses_each_pass_once` (§27, in-crate) | NFR-2, FR-7.3, FR-7.4 (Gap 9) — a three-window sentence-mode fix: five passes, each scans each block once and tags at most once; the original pass tags once, the final pass never; window planning scans nothing |
 | existing `fix_model` cases | NFR-6 — model rewrites still verified, now with `&w.codes` |
 | `failing_template_fix_is_slp901` | NFR-6 — forge an SLP004 fix whose replacement drops Y's capitalised word; SLP901 |
 
@@ -2602,7 +3238,8 @@ fixture test also exercises the new checks.
 | `text_tagger::rule_changes_tag_but_never_certainty` | FR-7.1 — "the guide": `guide` is `Noun`, not certain |
 | `rules::tests::tagging_runs_once_per_pass` | FR-7.3, NFR-2 |
 | `rules::tests::no_candidate_no_tagging` | FR-7.4 |
-| `layering::tagger_runs_only_inside_prose`, `prose_built_only_per_pass` | NFR-2 (structural) |
+| `text_tagger::spike_slp006_classes` | FR-7.5, FR-7.8 — the Phase 4 spike gate (§28): at least one subject class (A or B) is certain on every SLP006 positive of that class, and the tagger declines on every SLP006 negative and `unchanged` input; fails the build otherwise |
+| `layering::tagger_runs_only_inside_prose`, `prose_built_only_per_pass`, `segmentation_runs_only_inside_prose`, `sentence_scan_only_in_segmenter` | NFR-2, FR-1.4 (structural, §6) |
 | `layering::forbidden_uses`, `pure_modules_have_no_io` (rows added) | NFR-5, NFR-7 |
 | `slp006_fix_matches` (existing, fixture extended) | FR-7.7 |
 | `safe_fix_contexts_grammatical` (extended) | FR-7.5, FR-7.6, FR-7.8 |
@@ -2619,6 +3256,7 @@ fixture test also exercises the new checks.
 | `slp004_declines_across_sentences` | FR-8.1 — no fix when X and Y are in different sentences |
 | `slp003_declines_on_long_x_or_other_subject` | FR-8.2, FR-8.3 |
 | `slp003_mid_sentence_keeps_case` | FR-8.2 — "I think it's not a bug, it's a feature." → "I think it's a feature." |
+| `slp003_declines_additive_frame` | FR-8.2, FR-8.3, D-10 (Gap 3) — "It's not only cheap, it's quick." and "It's not just cheap, it's quick." each keep their SLP003 finding with no fix, and a rules-only fix leaves them unchanged; "It's not a bug, it's a feature." still becomes "It's a feature." |
 | `fix_is_idempotent_over_all_fixtures` (existing) | FR-8.7 |
 | `slp007_slp015_unchanged` (`tests/rules_registry.rs`) | FR-8.6 — both are `FixClass::Model` and `explain` equals the literal text of `slp007…rs:28-30`, `slp015…rs:26-29` |
 
@@ -2628,7 +3266,7 @@ fixture test also exercises the new checks.
 
 | Test | Verifies |
 |------|----------|
-| `stem::tests::inflections_meet` | FR-9.1 — make/makes/making share a stem; caches/cached/caching share a stem |
+| `stem::tests::inflections_meet` | FR-9.1 — make/makes/making share a stem; caches/cached/caching share a stem; runs against whichever backend §32 ships (Gap 8) |
 | `similarity::tests::jaccard_hand_values` | FR-9.1 — {a:2,b:1} vs {a:1,c:1} → 1/4 = 0.25; empty/empty → 0 |
 | `similarity::tests::stop_words_removed` | FR-9.1 |
 | `slp023_positive_fires`, `slp023_negative_silent` (macro) | FR-9.2, FR-9.3 |
@@ -2664,27 +3302,35 @@ fixture test also exercises the new checks.
 | DQ-7 | Sentences with no prose word | Not counted by metrics (a code-only "sentence" would add a 0-length sentence and distort SD). |
 | DQ-8 | The negation list | `NEGATIONS` of §22 plus every `n't` form. `without`, `hardly`, `few` are excluded, being scalar rather than polar. |
 | DQ-9 | Modal contractions | `won't`, `can't`, `cannot`, `shan't`, `Xn't` and `'ll` map to their modal. `'d` is not mapped (would or had), so "I'd" → "I would" is rejected as SLP901. |
-| DQ-10 | Proper-noun proxy scope | Capitalised, not sentence-initial, and not a common word (`NOT_NAMES`, stop words, modals, hedges). All-caps words count, so a mid-sentence all-caps SLP001 replacement and title-case content words in headings become SLP901: loud, never silent, and not present in any fixture (FR-6.6). |
+| DQ-10 | Proper-noun proxy scope | Capitalised and not sentence-initial. For rule-origin edits, common words (`NOT_NAMES`, stop words, modals, hedges) are also skipped; for model rewrites they are not. That split is OD-2's option (a), Brad's to confirm (review Gap 11). All-caps words count, so a mid-sentence all-caps SLP001 replacement and title-case content words in headings become SLP901: loud, never silent, and not present in any fixture (FR-6.6). |
 | DQ-11 | SLP006 subject classes | Class A `Det N`, class B `Det Adj N`, sentence-initial, singular-compatible determiner, every word certain, no verb in the clause after "as", and not an `AS_IDIOMS` phrase. `AS_IDIOMS` applies to the new branch only, to keep FR-7.7 and NFR-1. |
 | DQ-12 | SLP004 guards | Y must end the clause (followed by `.,;:!?` or the block end). X and Y must be certain, share one content tag and lie in one sentence. A leading capital "Not" capitalises X. |
-| DQ-13 | SLP003 guards | Same subject twice. Separators `, ; : — –` and spaced hyphens, never a sentence end. X has no capital, digit or protected run. X and Y each have 1..=`max_words` words. Sentence-initial matches capitalise through `delete_lead_in`. |
+| DQ-13 | SLP003 guards | Same subject twice. Separators `, ; : — –` and spaced hyphens, never a sentence end. X has no capital, digit or protected run, and does not start with an `ADDITIVE` focus word (only, just, merely, simply, solely, even; review Gap 3). X and Y each have 1..=`max_words` words. Sentence-initial matches capitalise through `delete_lead_in`. |
 | DQ-14 | Jaccard or cosine | Weighted Jaccard over counts: integers only, no square root, and FR-9.1 allows it. |
 | DQ-15 | Redundancy reporting | One finding per later sentence, on its first prose run. The message names the earlier sentence's line. |
 | DQ-16 | Calibration licence policy | Public domain only (US federal works; texts published before 1929). No CC BY-SA or other attribution or share-alike licence, so the MIT repo carries no licence obligations. |
-| DQ-17 | Which wordiness rows | No row may add or remove a modal or negation (they would fail Phase 3's FR-6.6 gate). No new `None` row (it would raise FR-10's residual). |
+| DQ-17 | Which wordiness rows | No row may add or remove a modal or negation (they would fail Phase 3's FR-6.6 gate). No new `None` row (it would raise FR-10's residual). Every row is context-free, guarded (noun-final, or not after "be") or omitted (§20, review Gap 2). |
 | DQ-18 | Text-report layout | Metrics line after the score line; `metrics before` line on Fix/Diff; overall metrics on a line after the summary line. |
 | DQ-19 | `explain` shows bounds | Yes: `(min …)` or `(min …, max …)` after the help text. MCP `explain_rule` gains `min`/`max` (`null` when unbounded). |
 | DQ-20 | Lexicon policy | Common tags only, first tag most frequent. Required entries pinned by a test (§26). At most 3,000 entries and a few hundred rules (D-7). |
 | DQ-21 | Model-reliance settings | Default settings, sources as temp-dir paths, so no checkout config applies (§2). |
+| DQ-22 | What a failed SLP001 guard does | Drops the match: no finding, no fix. A fix-less Safe finding would select a model window and raise the FR-10 residual (§20). |
+| DQ-23 | How FR-1.4 equality is proven once `sentence_range` is gone | A verbatim copy of it, as the oracle, in `tests/text_segment.rs`, compared on every fixture (§5, §36.1). It is test code that `src/` never calls. |
+| DQ-24 | How the NFR-2 tests observe work | A `#[cfg(test)]` thread-local scan counter in `text::segment` and `Prose::tag_runs` (architecture §4.8), read by in-crate tests in `engine::window` (Phase 1b) and `pipeline` (Phase 4). |
 | PRD assumptions adopted | PRD §9 records Brad's answers (Q1–Q7) as D-2, D-3, D-4, D-10, D-11; there are no open `Assumption:` items. | Adopted as decided. |
 
 ---
 
 ## Open Decisions
 
+Three questions only Brad can answer. Each affected section is written for the recommended option, and the row says
+what changes under the others. None is decided here.
+
 | # | Question | Options (consequence each) | Recommendation |
 |---|----------|----------------------------|----------------|
-| OD-1 | ADR-08 is **Proposed**. Where do the wordiness rows and the detection-only intensifiers go? The PRD's "existing wordiness rule" (FR-11.2) does not exist; the Safe phrase table is SLP001 `ai-vocabulary-replaceable`. | **(a)** Wordiness and nominalisation rows extend SLP001 (default-on, so no-model `--fix` gains them by default); intensifiers go to a new default-off `FixClass::None` rule SLP022. Default users see new SLP001 findings and scores on padded phrasing; SLP001's name and `ai-vocabulary` family now also cover generic wordiness. **(b)** A new default-off Safe rule `wordiness` (it would take SLP022, family Wordiness) holds every new row, and intensifiers go to SLP023 `weak-intensifier` (`FixClass::None`), so redundancy becomes SLP024. Default users get none of the new fixes until they enable it; no default score changes. **(c)** Everything in SLP001 with intensifiers as `None` rows. Intensifiers become default-on findings that select model windows, against D-10 and FR-10.3. | **(a)**, because it is the only option where the PRD's goal "does more with no model" reaches default users, and it keeps intensifiers away from the model. §20–§21 are written for (a). Under (b), §20's rows move unchanged into the new rule's file, SLP001 is untouched, §21 and §34 renumber, and §35's `extend_select` adds the wordiness rule. |
+| OD-1 | ADR-08 is **Proposed** (review Gap 4). Where do the wordiness rows and the detection-only intensifiers go? The PRD's "existing wordiness rule" (FR-11.2) does not exist; the Safe phrase table is SLP001 `ai-vocabulary-replaceable`. | **(a)** Wordiness and nominalisation rows extend SLP001 (default-on, so no-model `--fix` gains them by default); intensifiers go to a new default-off `FixClass::None` rule SLP022. Default users see new SLP001 findings and scores on padded phrasing; SLP001's name and `ai-vocabulary` family now also cover generic wordiness. **(b)** A new default-off Safe rule `wordiness` (it would take SLP022, family Wordiness) holds every new row, and intensifiers go to SLP023 `weak-intensifier` (`FixClass::None`), so redundancy becomes SLP024. Default users get none of the new fixes until they enable it; no default score changes. | **(a)**, because it is the only option where the PRD's goal "does more with no model" reaches default users, and it keeps intensifiers away from the model. The review agrees. §20–§21 are written for (a). Under (b), §20's rows, guard and tests move unchanged into the new rule's file, SLP001 is untouched, §21 and §34 renumber, and §35's `extend_select` adds the wordiness rule. The §20 guard (Gap 2) is needed under both. Putting intensifiers into SLP001 as `None` rows is not offered: they would be default-on findings that select model windows, against D-10 and FR-10.3. |
+| OD-2 | Review Gap 11. Which edits may skip capitalised common words (stop words, modals, hedges, `NOT_NAMES`) in the proper-noun check? FR-6.2 literally exempts only sentence-initial tokens; the existing title-case Safe fix "It May Potentially fail." → "It May fail." (`tests/rules_fixtures.rs:271-277`) needs some exemption. | **(a)** Rule-origin edits only. Safe fixes are deterministic, and the FR-6.6 gate checks each fixture, so the hedge fixture passes. Model rewrites get the literal proxy, so a model that drops the title "It" in "We watched It and a robust sequel." is rejected. A model rewrite that only re-cases a title-case common word is also rejected, loudly, as SLP901. **(b)** Every origin. The first draft did this. It is simpler, but names and titles made of common words ("It", "Will", "May") can disappear in a model rewrite, and FR-6.2's guarantee must be narrowed in the PRD and REFERENCE. **(c)** No exemption at all. The literal FR-6.2 breaks the existing SLP009 fixture, so NFR-1 fails. | **(a)**, because the check exists to catch lost names, and the model is the origin that can lose them. The review recommends the same. §22–§23 and `rejects_model_removal_of_capitalised_common_word` are written for (a). Under (b), `meaning` drops `skip_common` (it is always true), that test is deleted, and the FR-6.2 PRD Deviation Note widens to every origin. |
+| OD-3 | Review Gap 5. D-5 says the metric minimums are "configurable as params". Must raw-report availability honour configurable minimums, or may this release fix the report floors at 5 sentences and 100 words and configure only when the rules fire? | **(a)** Configurable report floors. A new top-level `[metrics]` table with `min_sentences` and `min_words` (validated ≥ 1 at load) goes into `Settings`, and `Counts::derive` takes the floors. The architecture must also pick one floor for `summary.metrics`, because files under different nested configs can disagree; the plausible rule is the floors of the run's root config. The rule params' lower bound then reads the configured floor instead of the `MIN_*` constants. This adds an architecture revision, a config-schema addition and REFERENCE text. **(b)** Fixed floors (this SPEC, architecture §8: "report minimums are constants"). The rule minimum params can raise when a rule fires, never below the floors (FR-4.3). The PRD records the narrower D-5 contract. | **(b)** for this release. It is what the approved architecture specifies. It has no ambiguity for the overall summary, and `[metrics]` can be added later without a breaking change. The review recommends (a), because configurability is explicit in D-5 and metrics are the priority. That is a fair reading, so this is Brad's call. Under (a), §8, §11, §12, §15 and §16 change as described, and the architecture's §4.4, §8 and ADR-09 need revision first. |
 
 ---
 
@@ -2696,19 +3342,20 @@ fixture test also exercises the new checks.
   union, because summed distinct counts double-count shared words.
 - **D-5 "configurable as params":** report floors are constants, and the rule minimums are params bounded below by
   them (architecture PRD Deviation Note 3; §16). Why: params belong to rules, and metrics are reported with every
-  rule off.
+  rule off. The review (Gap 5) asks whether this narrower contract is acceptable. That is OD-3, not settled here.
 - **FR-6.2:** the PRD says reject an edit that "removes or changes a capitalised token that is not sentence-initial".
-  The SPEC also skips capitalised common words (`NOT_NAMES`, stop words, modals, hedges; §22, §23). Why: without it,
-  the existing `slp009_keeps_the_modal_case` test ("It May Potentially fail." → "It May fail.") would be rejected,
-  and so would every title-case function word. Neither is a name, and NFR-1 requires existing tests to pass. The
-  literal reading is kept for every other capitalised word, all-caps included (DQ-10).
+  For rule-origin edits only, the SPEC also skips capitalised common words (`NOT_NAMES`, stop words, modals, hedges;
+  §22, §23). Why: without it, the existing `slp009_keeps_the_modal_case` test ("It May Potentially fail." → "It May
+  fail.") would be rejected, and NFR-1 requires existing tests to pass. Model rewrites keep the literal reading, and
+  so does every other capitalised word, all-caps included (DQ-10). The scope is OD-2 (option (a) written).
 - **FR-6.3:** the PRD says "changes the multiset of modal verbs". The SPEC maps contractions to their modal (DQ-9).
   Why: "will not" → "won't" keeps the modal, and a literal token compare would reject it.
-- **NFR-2:** the PRD's verification is "a test that counts tagger invocations across a multi-window fix". The SPEC
-  proves it in two parts. The structural tests (`tagger::tag(` only in `Prose::tags`; `Prose::new(` only in
-  `detect_in` and in-crate tests) bound it to one tagging per `Prose` and one `Prose` per document pass. The in-crate
-  `tagging_runs_once_per_pass` shows the per-`Prose` bound. Why: the `#[cfg(test)]` counter the architecture chose
-  does not exist in integration builds, and a global counter would be the mutable global state NFR-8 forbids.
+- **NFR-2:** the PRD's verification is "a test that counts tagger invocations across a multi-window fix". The SPEC's
+  test does that, as an in-crate test rather than one under `tests/`
+  (`pipeline::tests::multi_window_fix_analyses_each_pass_once`, §27). It also counts block scans per pass and in
+  window planning. Structural layering tests (§6) and `rules::tests::tagging_runs_once_per_pass` back it up. Why
+  in-crate: the `#[cfg(test)]` counters the architecture chose (§4.8) do not exist in integration builds, and a
+  production counter would be the mutable global state NFR-8 forbids.
 - **NFR-5:** the PRD says "the existing no-network test pattern run over a lint and a fix of a metrics-enabled
   document". No such generic test exists. The SPEC relies on `pure_modules_have_no_io` (now over `src/text/`) and
   `network_only_in_pull` (`tests/layering.rs:96-104, 214-217`), and records the release-binary size before and after
@@ -2721,52 +3368,30 @@ fixture test also exercises the new checks.
 
 ## Architecture Deviation Notes
 
-- **§4.1 Segmenter / ADR-03:** the architecture says `sentence_range` keeps only range arithmetic over
-  `sentence_starts`. The code forces `pub(crate) blanked` and `scan_starts` beside `sentence_starts`, because today's
-  `sentence_range` trims on the blanked copy (`src/engine/window.rs:271-277`). Trimming the raw source would keep a
-  continuation prefix (`> `) and change window ranges, against the phase-1b gate. The architecture needs: name the
-  two `pub(crate)` helpers in §4.1.
-- **§4.10 Verifier / ADR-03:** the architecture says sentence-initial status of the edit's first token comes from
-  `sentence_starts` on the edit's block. The code forces `starts_sentence` on the block's text (with the new
-  `BlockText::to_text`), because a block's range includes line-start markup. For `# It is worth noting that …`
-  (`tests/rules_fixtures.rs:266-269`) the raw sentence start is the `#`, so "It" would count as a name and the
-  SLP008 fix would be rejected. ADR-03 already names `starts_sentence` for the verifier. The architecture needs: §4.10
-  to say `starts_sentence` plus `BlockText::to_text`.
-- **§4.2 Lexicon:** the architecture lists negations, modals, stop words, determiners and pronouns. The SPEC adds
-  `HEDGES`, `NOT_NAMES` and `is_common_capitalised` for the proper-noun proxy (PRD Deviation Note on FR-6.2).
-  Determiners and pronouns live in the tagger lexicon (§26), not in `text::lexicon`. The architecture needs: the
-  list in §4.2.
-- **§4.5 Tagger:** `Tagged` gains `unknown: bool`, because FR-7.1 requires an "unknown" flag, and `certain` alone
-  conflates unknown with ambiguous. The architecture needs: the field in §4.5.
-- **§4.8 Prose / §11 tests:** the NFR-2 single-tagging test is an in-crate unit test plus two structural layering
-  tests, not a pipeline test (PRD Deviation Note on NFR-2). The architecture needs: §11's Pipeline row to say so.
-- **§4.11 Pipeline:** `detect_in` returns a private type alias `Detected` for the 4-tuple, because
-  `clippy::type_complexity` under `-D warnings` (`Makefile:93`) is likely to reject the bare type.
-- **ADR-06 / §4.11:** `Window.codes` keeps one entry per overlapping finding, duplicates included. The allowance
-  counts SLP003/SLP004 findings, and a deduplicated list could not count two.
-- **§4.12 Report:** the architecture says "the summary line gains the overall metrics". The SPEC prints them on a
-  new line after it, so `summary_line` stays byte-identical (DQ-18).
-- **§4.9 / FR-11.1:** the architecture says `RULE_SET_VERSION` is "bumped per phase that adds a rule". The SPEC bumps
-  it once per unreleased version (DQ-3).
-- **§11 Test Architecture, line 563, and PRD line 298:** both name the host build contract, which fails
-  `tests/standalone.rs::no_host_references`. §1 rewrites both. The architecture needs: that row's "Runs as" column in
-  the repo's `make test TESTS='…'` form.
+Architecture version 0.2 absorbed the ten deviations the round-1 SPEC listed (review Gap 6; architecture Revision
+Log), so they are no longer deviations. One small difference remains:
+
+- **§4.10 Verifier:** the architecture sketches `meaning(text: &str, initial_at_start: bool)` and leaves open which
+  capitalised common words the proper-noun check skips (§4.2, §4.10, Gap 11). The SPEC writes OD-2's option (a), so
+  `meaning` takes a third argument, `skip_common: bool`, set from the proposal's origin (§23). This does not decide
+  the open question: under option (b) the argument goes away and the sketch stands as written. The architecture
+  needs: nothing now; after OD-2, §4.10's sketch should carry whichever signature Brad's choice implies.
 
 ---
 
 ## Self-Audit
 
 - **FR coverage:**
-  - FR-1: FR-1.1 → §4. FR-1.2 → §4. FR-1.3 → §4, §36.1. FR-1.4 → §3, §5. FR-1.5 → §4, §9.
+  - FR-1: FR-1.1 → §4. FR-1.2 → §4. FR-1.3 → §4, §36.1. FR-1.4 → §3, §4, §5, §6, §11. FR-1.5 → §4, §9.
   - FR-2: FR-2.1 → §8. FR-2.2 → §8. FR-2.3 → §7, §8. FR-2.4 → §8. FR-2.5 → §8. FR-2.6 → §7, §14. FR-2.7 → §8.
     FR-2.8 → §8, §12. FR-2.9 → §8. FR-2.10 → §4, §8.
   - FR-3: FR-3.1 → §12. FR-3.2 → §12. FR-3.3 → §13. FR-3.4 → §11, §12. FR-3.5 → §12. FR-3.6 → §14.
   - FR-4: FR-4.1 → §16, §17. FR-4.2 → §15, §16, §17. FR-4.3 → §16. FR-4.4 → §17. FR-4.5 → §17. FR-4.6 → §17.
     FR-4.7 → §17.
-  - FR-5: FR-5.1 → §20. FR-5.2 → §20. FR-5.3 → §20. FR-5.4 → §21. FR-5.5 → §20.
+  - FR-5: FR-5.1 → §20. FR-5.2 → §20. FR-5.3 → §20 (guarded and omitted rows). FR-5.4 → §21. FR-5.5 → §20.
   - FR-6: FR-6.1 → §22, §23. FR-6.2 → §3, §22, §23. FR-6.3 → §22, §23. FR-6.4 → §23, §24. FR-6.5 → §24.
     FR-6.6 → §36.6. FR-6.7 → §25. FR-6.8 → §36.6.
-  - FR-7: FR-7.1 → §26. FR-7.2 → §26. FR-7.3 → §10, §27. FR-7.4 → §27, §28. FR-7.5 → §28. FR-7.6 → §28.
+  - FR-7: FR-7.1 → §26. FR-7.2 → §26. FR-7.3 → §10, §27. FR-7.4 → §27, §28. FR-7.5 → §28 (spike gate). FR-7.6 → §28.
     FR-7.7 → §28. FR-7.8 → §28.
   - FR-8: FR-8.1 → §29. FR-8.2 → §30. FR-8.3 → §29, §30. FR-8.4 → §29, §30, §31. FR-8.5 → §23, §29, §30.
     FR-8.6 → §31. FR-8.7 → §29, §30.
@@ -2775,7 +3400,8 @@ fixture test also exercises the new checks.
   - FR-11: FR-11.1 → §18. FR-11.2 → §17, §20, §21, §34. FR-11.3 → §15, §18.
 - **NFR coverage:**
   - NFR-1 → §1, §12, §28, §31, §36 (only the listed test edits).
-  - NFR-2 → §6, §9, §11, §27, §35.
+  - NFR-2 → §4 (cached bounds, scan counter), §5 (no rescan in planning), §6, §9, §11, §27 (behavioral pipeline
+    test), §35.
   - NFR-3 → §8, §12, §36.2.
   - NFR-4 → §7, §15, §22, §26.
   - NFR-5 → §6, §32, PRD Deviation Notes.
@@ -2788,13 +3414,14 @@ fixture test also exercises the new checks.
   - §4.1 Segmenter → §3, §4, §5. §4.2 Lexicon → §22. §4.3 Syllable → §7. §4.4 Metrics → §8, §14.
   - §4.5 Tagger → §26. §4.6 Stem → §32. §4.7 Similarity → §33. §4.8 Prose → §6, §9, §27.
   - §4.9 Rule integration → §10, §16, §17, §18, §20, §21, §28, §29, §30, §31, §34.
-  - §4.10 Verifier → §3, §23, §25. §4.11 Pipeline and windows → §5, §11, §24. §4.12 Report and MCP → §12, §13, §14.
+  - §4.10 Verifier → §3, §23, §25. §4.11 Pipeline and windows → §5, §11, §24, §27. §4.12 Report and MCP → §12, §13, §14.
   - §4.13 Config bounds → §15. §4.14 Model-reliance harness → §2.
-  - §12 phases 1a–6 → section order. ADR-01 → §6. ADR-02 → §9, §10, §11, §27. ADR-03 → §3, §4, §5.
+  - §12 phases 1a–6 → section order; phase 1b gate → §5, §36.1; phase 4 spike gate → §28. ADR-01 → §6.
+    ADR-02 → §4, §5, §9, §10, §11, §27. ADR-03 → §3, §4, §5.
   - ADR-04 → §8. ADR-05 → §12, §13. ADR-06 → §23, §24. ADR-07 → §7, §22, §26. ADR-08 → §20, §21 (OD-1).
     ADR-09 → §15, §16.
-- **Deviations:** 7 PRD Deviation Notes and 10 Architecture Deviation Notes, all listed above. One Open Decision
-  (OD-1).
+- **Deviations:** 7 PRD Deviation Notes and 1 Architecture Deviation Note, all listed above. Three Open Decisions
+  (OD-1 to OD-3), each a review DECIDE item.
 - **Self-review:** ran passes 0–5 over the draft and fixed what they found.
   - *Pass 0 (grounding):* every cited line was re-read in this session. `ParamSpec` call sites are `slp005:41`,
     `slp010:43,48`, `slp011:39` and `slp014:38`. `verify::edit` call sites are pipeline `:118, :273`,
@@ -2805,7 +3432,7 @@ fixture test also exercises the new checks.
       `fixed.md` (FR-7.7). Fixed by pinning `tool` as ambiguous in §26 and testing it.
     - SLP004's `fixed.md` first assumed `fast` was certain. Fixed: `fast` is `[Adj, Adv]`, and line 1 stays unfixed.
     - The verifier's sentence-initial test first used `sentence_starts`. That broke the SLP008 heading test, so it
-      was switched to `starts_sentence` (deviation note).
+      was switched to `starts_sentence` (now in architecture §4.10).
     - The proper-noun proxy first broke `slp009_keeps_the_modal_case`. Fixed with the common-word exemption.
     - Names checked across sections: `Window.codes`, `Counts`/`Metrics`, `MIN_SENTENCES_PARAM`, `metric_anchor`
       and `Detected`.
@@ -2816,18 +3443,113 @@ fixture test also exercises the new checks.
   - *Pass 5 (decisions):* ADR-08 is routed to Brad as OD-1, not decided here. Everything else is a DQ inside the
     PRD's and architecture's decisions.
   - *Compile:* see the note under the title.
+  - *Revision pass (version 0.2):* re-ran passes 0–5 over every section the revision touched (§1, §3–§6, §9, §11,
+    §20, §22–§23, §27–§28, §30, §32, §36, §37, Open Decisions, deviation notes).
+    - The signatures `windows(doc, prose, findings, frozen, s)` and `model_windows(doc, prose, frozen, findings,
+      source, rw, seed)` match architecture §4.11 in §5, §11 and §27.
+    - `blanked` and `scan_starts` are now private everywhere they appear. No section calls them outside §4, and no
+      section names the old free function `sentence_starts(doc, block)`.
+    - `Prose::new(` allowed files (§6) now include `src/engine/window.rs` for §5's in-crate test.
+    - The first draft of the Gap 2 test put the counter-contexts in `safe_fix_contexts_grammatical`'s `unchanged`
+      list, which asserts a finding exists (`tests/rules_fixtures.rs:350-354`). Fixed with a separate test.
+    - Grounding re-read in this pass: `src/engine/window.rs:1-130, 230-278`, `src/pipeline/mod.rs:1-360`,
+      `src/engine/mod.rs`, `tests/common/mod.rs:1-200`, `tests/pipeline.rs:200-260`, `tests/engine.rs:1-75`,
+      `tests/rules_fixtures.rs:53-76, 303-356`, `src/rules/helpers.rs:1-100`, `slp001…rs`, `slp007…rs:1-40`,
+      `src/doc/mod.rs:160-335`, `src/model/mod.rs:59-83`, `src/config/mod.rs:38-66`, `tests/standalone.rs:14-36`.
 - **For the adversarial review:**
-  1. OD-1 (ADR-08).
+  1. OD-1 (ADR-08), OD-2 (Gap 11) and OD-3 (Gap 5), each routed to Brad with the written option stated.
   2. DQ-10: the proper-noun proxy's exemptions, and the loud SLP901 on mid-sentence all-caps or title-case-heading
      SLP001 fixes.
   3. The SLP003/SLP004 `fix.available` change (§31).
   4. §28's clause guard, which reads best-guess tags rather than certain ones (any verb-like guess declines, so it
      errs toward no fix).
   5. The NFR-2 proof form (PRD Deviation Note).
-  6. §1: the PRD and architecture currently fail `no_host_references`.
+  6. §1: the PRD currently fails `no_host_references`.
+  7. §20's guard: the three closed sentence shapes of `noun_final_allows` (read from the pass's `Segments`), its lists
+     (`NOUN_FOLLOW` with `CLAUSE`/`DECISION`, `RELATIVE`, `NOT_AFTER_TO`, `SUBJECT`, `CLOSERS`, `BE_FORMS`), the
+     recall it gives up, and the decision to drop unprovable matches rather than leave them fix-less.
+  8. §27's exact pass count (5), which depends on the §26 lexicon keeping `tool` ambiguous.
 
 ---
 
 ## Revision Log
 
-(first pass; no revisions yet)
+Version 0.2 revises the round-1 SPEC in place against architecture version 0.2 and review round 1
+(`directives/classical-nlp/gap-analysis.md`). No revision notes came with this pass and Brad has recorded no
+decisions, so the three DECIDE items are routed as Open Decisions, not decided.
+
+- round 1: Gap 1 (window planning rescans a segmented document) fixed in §4 (`Segments` caches per-block bounds;
+  `sentence_starts` and `sentence_span` are methods over the cache; `blanked`/`scan_starts` private; `#[cfg(test)]`
+  scan counter), §5 (`windows` takes `&Prose`; `sentence_range` deleted; `planning_does_not_rescan`), §6 (two new
+  structural tests; allowed files), §9, §11 (`model_windows` takes the base `Prose`; pairing rules), §36.1, §36.7.
+- round 1: Gap 2 (context-dependent wordiness rows) fixed in §20 (rows classified context-free, guarded or omitted;
+  `context_allows` guard; `a sufficient number of` and `in the event that` omitted; fixtures and
+  `slp001_guard_drops_unprovable_contexts`), §36.5, DQ-17, DQ-22.
+- round 1: Gap 3 (SLP003 deletes a "not only" assertion) fixed in §30 (`ADDITIVE`/`denies` guard, positive and fixed
+  lines, audit of X's first word), §36.9 (`slp003_declines_additive_frame`), DQ-13.
+- round 1: Gap 4 (ADR-08) is a DECIDE item and stays OD-1. The row is updated to say the Gap 2 guard applies under
+  both options.
+- round 1: Gap 5 (configurable report floors) is a DECIDE item, now OD-3, cross-referenced from the D-5 PRD
+  Deviation Note.
+- round 1: Gap 6 (ten deviations not absorbed) was fixed by the architecture (version 0.2). The SPEC's Architecture
+  Deviation Notes drop those ten and keep one new, non-deciding note (§4.10 `meaning` signature under OD-2).
+  §1 shrinks to the PRD line only, because the architecture's §11 already uses the repo's test form.
+- round 1: Gap 7 (Phase 4 contingency drops SLP006 widening) fixed in §28 (the spike fails loudly and halts the phase
+  until the tagger passes or Brad records a scope decision; no automatic drop) and §36.8
+  (`text_tagger::spike_slp006_classes`).
+- round 1: Gap 8 (deferred: fallback stemmer fails its inflection test) fixed now in §32 (final-`e` floor 3,
+  scratch-checked on make and cache families) and §36.10.
+- round 1: Gap 9 (deferred: no behavioral multi-window cache test) fixed now in §27 (test-only pass records in
+  `detect_in`/`model_windows`; `pipeline::tests::multi_window_fix_analyses_each_pass_once`), §36.7 and the NFR-2
+  PRD Deviation Note.
+- round 1: Gap 10 (missing conventions documents) was ACCEPT, so the SPEC does not change. `docs/context/` is still
+  absent; this pass worked from the code, `docs/DEVELOPMENT.md`, `Cargo.toml` lints, `clippy.toml` and
+  `tests/layering.rs`.
+- round 1: Gap 11 (global common-word exemption) is a DECIDE item, now OD-2. §22–§23 are written for the recommended
+  option (a), with what changes under (b). The FR-6.2 PRD Deviation Note and DQ-10 are narrowed to match, and
+  `rejects_model_removal_of_capitalised_common_word` is added (§36.6).
+- round 1: Gap 12 (equivalent count, contraction and test-form deviations) was ACCEPT, so the SPEC does not change.
+
+Version 0.3 revises version 0.2 against review round 2. Its revision notes name one open FIX item, Gap 2. The
+DECIDE items (Gaps 4, 5, 11: OD-1, OD-3, OD-2) and the DEFER/ACCEPT items (Gaps 8, 9, 10, 12) are left as they were,
+as the notes direct. Brad has recorded no decisions.
+
+- round 2: Gap 2 (the noun-final guard admits "reached a conclusion with which everyone agreed" → "concluded with
+  which …") fixed in §20. The flat `NOUN_FINAL`/`FOLLOW_OK` lists become per-noun `NOUN_FOLLOW`, with `CLAUSE`
+  (subordinators only) and `DECISION` (plus `about`/`on`/`to`/`whether`). A `RELATIVE` check (`which`/`whom`/`whose`
+  after the follow word) and a `NOT_AFTER_TO` check (determiner after `to`) are added, along with the `next_word`
+  helper. The whitelist was audited as a whole, and `and`, `or`, `but`, `as`, `with`, `for`, `in`, `at`, `by`, `so` and
+  `when` were dropped, each with its damaging example. Both round-2 inputs and four audit counter-contexts are added
+  to `negative.md` and `slp001_guard_drops_unprovable_contexts`. Positive complements are kept, and two more `fixed`
+  cases are added to `safe_fix_contexts_grammatical`. The guard was rebuilt and tested in a scratch crate. Also
+  touched: §36.5 (test rows), the Self-Audit item 7 and the version (0.3). Re-checked: §20's code block against
+  `src/rules/helpers.rs:35-75` and `slp001_ai_vocabulary_replaceable.rs:56-79` (unchanged signatures: `WordList::find`
+  yields `(Range<usize>, Option<String>)`, and `check` pushes via `ctx.finding`). DQ-17 and DQ-22 still hold as
+  worded (guarded rows; drop on a failed guard). The architecture needs no change. It does not specify the row guard,
+  and `WordList` is still "reused as is" (architecture §2 touchpoints, line 50): the guard lives in the rule. This
+  round has no FIX-ARCHITECTURE item.
+
+Version 0.4 revises version 0.3 against review round 3. Its revision notes name one open FIX item, Gap 2 (HIGH
+FIX-SPEC). The DECIDE items (Gaps 4, 5, 11: OD-1, OD-3, OD-2) and the DEFER/ACCEPT items (Gaps 8, 9, 10, 12) are
+left as they were, as the notes direct. There is no FIX-ARCHITECTURE item. Brad has recorded no decisions.
+
+- round 3: Gap 2 (the infinitive lookahead accepts "We made a decision to leave and a plan to return." → "We decided
+  to leave and a plan to return.") fixed in §20. The text-based `next_word`/`context_allows` lookahead is replaced by
+  `noun_final_allows`, which reads the noun's whole sentence from the pass's `Segments` (`ctx.prose`, §10) and accepts
+  only three closed shapes. The noun ends the sentence; or exactly a listed word plus one more word follow it; or an
+  adverbial row opens the sentence before a comma and a subject pronoun. Every word after the deleted noun is
+  therefore accounted for, so no coordinated, compared or appended phrase can depend on the deleted noun or verb.
+  This is a positive proof, not a longer blacklist, which is what the review asked for. `whether` leaves `DECISION`
+  (shape 2 cannot hold "whether to go"). `NOT_AFTER_TO` gains the object pronouns, and a capitalised word after "to"
+  is refused. `SUBJECT` and `CLOSERS` are new, and the "the fact that" check moves unchanged into `fact_that_allows`.
+  `allowed` now takes `ctx`. The review's input and six more delayed-dependency counter-contexts are added to
+  `negative.md` and to `slp001_guard_drops_unprovable_contexts` (now `GUARD_COUNTER_CONTEXTS`, twenty sentences).
+  "At this point in time, we stop." → "Now, we stop." is added to `safe_fix_contexts_grammatical`. The recall given
+  up is listed in §20's design notes. The guard and `fact_that_allows` were rebuilt and tested in a scratch crate
+  over a stand-in for §4's `Segments`, with `cargo test` and `clippy -D warnings` clean. Also touched: §36.5 (test
+  rows), the Self-Audit item 7, the compile-check note under the header and the version (0.4). Re-checked: §20's code
+  against `src/rules/helpers.rs:35-75` (source ranges from `WordList::find`), `src/rules/mod.rs:92-113` (`blocks`,
+  `finding`), `src/doc/mod.rs:161-162` (`Document.src: Arc<str>`, which coerces to `&str`), and §4/§9/§10
+  (`Segments` methods and fields, the `Word` re-export, `RuleCtx.prose`). DQ-17 and DQ-22 still hold as worded. Using
+  `RuleCtx.prose` in a rule is what architecture §4.9 and ADR-02 already provide, and the row guard stays inside the
+  rule, so the architecture needs no change.

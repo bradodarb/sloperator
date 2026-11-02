@@ -2,27 +2,22 @@
 
 **Source:** [PRD](../../docs/classical-nlp/PRD-classical-nlp.md) | [Architecture](../../docs/classical-nlp/ARCHITECTURE-classical-nlp.md) | [SPEC](../../docs/classical-nlp/SPEC-classical-nlp.md)
 **Reviewer:** product-reviewer
-**Last round:** 1 (2026-11-02)
+**Last round:** 4 (2026-11-02)
 
 ## Executive Summary
 
-Recommendation: **fix_architecture**. Gap 1 leaves sentence-window planning outside the per-document segmentation cache; the architecture must establish that shared path before the dependent SPEC changes.
+Recommendation: **proceed**. Gap 2 is RESOLVED (round 4): the sentence-tail guard rejects delayed coordination and retains explicit positive contexts. All five earlier FIX items are resolved; no new findings. Three existing DECIDE items must reach Brad at the next human stop.
 
-12 findings: BLOCKING 0, HIGH 4, MEDIUM 6, LOW 2. Dispositions: FIX-ARCHITECTURE 3, FIX-SPEC 2, DECIDE 3, DEFER 2, ACCEPT 2. Five FIX items remain open, including two MEDIUM architecture items. The most consequential delivery defect is Gap 2: default-on wordiness replacements can silently turn grammatical input into broken prose, and neither the verifier nor the planned tests would reject it. Gap 3 similarly loses an assertion through a Safe template. Three decisions need Brad; none is treated as an author fix.
+Current retained findings: BLOCKING 0, HIGH 1, MEDIUM 4, LOW 2; dispositions FIX-SPEC 0, FIX-ARCHITECTURE 0, DECIDE 3, DEFER 2, ACCEPT 2. The most consequential outstanding item is Gap 11: Brad must settle the capitalised-name protection guarantee. No MEDIUM/LOW FIX remains. This is a design-review conclusion; proposed implementation tests were not executed by this reviewer.
 
-The whole PRD, SPEC, architecture and nine initiative ADRs were read. No UX artifact is present; the architecture explicitly assigns CLI/JSON/MCP surfaces to FR-3. The requested context map and conventions file are absent (Gap 10); the root README, DEVELOPMENT, architecture, actual code and layering tests supply the available conventions.
+Round 4 follows the delta contract. The requested context map and conventions file are still absent (Gap 10); available code and root README were read. No UX artifact is present in the initiative listing. Earlier rounds retain the full-review record below.
 
 ## Triage
 
 | Gap | Severity | Origin | Disposition | What must change / rationale |
 |-----|----------|--------|-------------|------------------------------|
-| 1 | HIGH | first-draft | FIX-ARCHITECTURE | Sentence windows must consume the existing per-pass segmentation rather than rescan each selecting finding. |
-| 2 | HIGH | first-draft | FIX-SPEC | Guard or omit context-dependent wordiness replacements; preserve grammatical noun compounds and agreement. |
-| 3 | HIGH | first-draft | FIX-SPEC | SLP003 must decline additive “not only/just” constructions rather than delete their first assertion. |
 | 4 | MEDIUM | decision | DECIDE | Confirm ADR-08's placement/default trade-off (SPEC OD-1). |
 | 5 | MEDIUM | decision | DECIDE | Configurable report minimums versus fixed report floors with rule-only params. |
-| 6 | MEDIUM | drift | FIX-ARCHITECTURE | Absorb the SPEC's ten explicit architecture deviations into their owning sections/ADRs. |
-| 7 | MEDIUM | first-draft | FIX-ARCHITECTURE | Remove the automatic permission to drop SLP006 widening on spike failure. |
 | 8 | MEDIUM | first-draft | DEFER | Phase 6 stemmer story must make the named inflection test pass for the fallback backend. |
 | 9 | MEDIUM | first-draft | DEFER | Phase 4/5 pipeline story must retain a behavioral multi-window cache regression test. |
 | 10 | LOW | first-draft | ACCEPT | Missing context/conventions documents limit the conventions audit; available repo rules were reviewed. |
@@ -435,3 +430,149 @@ The existing APIs and cited integration seams were opened: Document/BlockText/pr
 **Executed baseline verification:** seven targeted existing tests passed: all six rules_core tests and rules_fixtures::safe_fix_contexts_grammatical. Selected through the project contract, with the repository selector equivalent `make test TESTS='sloperator::rules_fixtures#safe_fix_contexts_grammatical rules_core'`. The first attempted exact selectors omitted the binary prefix and were rejected with “no test ran”; the corrected run passed seven tests. No whole-tree build/test was run. These tests validate current helper behavior, not the new feature snippets or the author's claimed scratch compile.
 
 **Deferred routing:** Gaps 8 and 9 are separately recorded in [deferred.md](deferred.md). The missing conventions inputs, explicit accepted deviations and known counted-allowance limitation are recorded here; none is silently called verified delivery.
+
+## Round 2
+
+### Earlier FIX re-check
+
+| Gap | Result | Verified correction or remaining evidence |
+|-----|--------|------------------------------------------|
+| 1 | RESOLVED (round 2) | Architecture §4.1/4.8/4.11 and ADR-02/03 now make window planning consume the pass's cached bounds. SPEC §4:333–354 implements arithmetic-only sentence_span; §5 passes Prose, deletes sentence_range and specifies planning_does_not_rescan; §11 pairs the base Document/Prose; §27 and §36.1/36.7 specify observed scan counts. Compared with actual src/engine/window.rs:75–108, :241–278 and src/pipeline/mod.rs:145–157. This resolves the design gap, not a claim that future tests passed. |
+| 2 | STILL OPEN | SPEC §20:1602–1633 rejects the original noun compounds but FOLLOW_OK admits “with” without checking the relative clause after it. See the continuation below. |
+| 3 | RESOLVED (round 2) | SPEC §30:2678–2699 adds sorted ADDITIVE and denies before the template attaches a fix; §36.9 requires both only/just decline regressions and the ordinary-denial positive. The originally reported additive frames can no longer take the Safe path. |
+| 6 | RESOLVED (round 2) | Architecture §4.1 (private scan helpers), §4.10 + ADR-03 (starts_sentence/to_text), §4.2 (lexicon), §4.5 (unknown), §4.8/11 + ADR-02 (test form), §4.11 (Detected and duplicate codes) + ADR-06, §4.12 (separate overall line), §2 (version bump), §11 (repo-native command form) absorb all ten deviations. SPEC Architecture Deviation Notes now retain only the explicitly decision-dependent meaning signature. |
+| 7 | RESOLVED (round 2) | Architecture §12 Phase 4 and SPEC §28:2533–2540 halt on spike failure; correction or an explicit Brad scope decision is required. SPEC §36.8 names the failing spike test. No automatic widening removal remains. |
+
+Changed since round 1: snapshot stat reports architecture 221 lines, SPEC 956 lines, ADR-02 24 lines, ADR-03 25 lines and ADR-06 11 lines changed. Ran snapshot stat and diff; reviewed the changed mechanisms, tests, decisions and Revision Logs, plus their reached code contracts. PRD and other ADRs are unchanged; no UX file is present in the initiative listing.
+
+### Gap 2 continuation: the new noun-final guard still permits unsafe replacements
+
+**Status:** STILL OPEN  
+**Severity:** HIGH  
+**Origin:** fix-regression (the revised guard; original gap remains first-draft in round 1)  
+**Disposition:** FIX-SPEC  
+**Requirements:** D-10, FR-5.1–FR-5.3.  
+**Evidence:** SPEC §20:1577 (reached a conclusion → concluded), :1602–1633 (NOUN_FINAL/FOLLOW_OK/context_allows), :1683–1698 (the seven negative cases); §36.5. Actual WordList matching/replacement: src/rules/helpers.rs:35–65; SLP001 Safe/default-on metadata and attachment: src/rules/builtin/slp001_ai_vocabulary_replaceable.rs:37–44, :62–76. Verifier gates: src/verify/mod.rs:91–143; the planned meaning checks in SPEC §23 do not test grammar.
+
+**Trigger/result:** “We reached a conclusion with which everyone agreed.” matches the guarded row. Its last word is conclusion, and its next alphabetic word is with, which FOLLOW_OK expressly permits. The Safe replacement produces “We concluded with which everyone agreed.” The relative clause needs the noun antecedent that the replacement deletes. Likewise “We made a decision about which everyone complained.” becomes “We decided about which everyone complained.”
+
+**Verification in this session:** inspected the exact guard and row, then evaluated its noun-final and FOLLOW_OK predicates on the first input with a literal scratch calculation: both true; the specified replacement printed the broken sentence. This was a predicate reproduction, not a compiled feature test. The design is not yet implemented.
+
+**Why it still holds the loop:** the seven new negatives cover direct noun compounds, direct that-relative clauses, be-complements and omitted rows. None tests a preposition followed by which. The positive-per-row fixture, idempotency, meaning multisets and model-reliance gate can all pass with this damage. No later named gate forces this counter-context into view, so this retains HIGH under the outcome/later-gate rule rather than becoming deferred grammar work.
+
+**Required correction:** make the noun-final guard decline relative-clause continuations that retain the replaced noun as their antecedent, or omit the affected row/context when certainty cannot be established. Audit the whitelist as a whole rather than treating each preposition as proof of a complete phrase. Add unchanged/no-Safe-fix regressions for both examples while preserving the existing positive complements. This is independent of OD-1 placement; no Brad decision is needed to preserve grammatical output.
+
+**Confidence:** 99%.
+
+### Delta alignment, coverage and feasibility
+
+These rows supersede only the affected round-1 coverage rows; all other coverage and accepted/deferred intent remain as previously recorded.
+
+| Requirement / owner | Current design status | Evidence |
+|---------------------|-----------------------|----------|
+| FR-1.4, NFR-2; segmenter, Prose, pipeline/windows (ADR-02/03) | COMPLETE | SPEC §4–6/9/11, scan-count planning test and old-range oracle (§36.1), behavioral pipeline test (§27/36.7). The code's existing range arithmetic and actual Rewriter/Factory seams were opened. |
+| FR-5.1–5.3; SLP001 | PARTIAL | Original examples covered; Gap 2 persists for whitelisted preposition-relative continuations. |
+| FR-6.2; lexicon/verifier (ADR-06) | PARTIAL, awaits Gap 11 | SPEC §23 uses rule-origin-only common-word exemption and §36.6 adds model-title regression; explicitly conditional OD-2, not Brad approval. |
+| FR-7.3; Prose/pipeline | COMPLETE as specified; delivery test retained | §27 now spells out an in-crate multi-window test with pass records, per-pass scan/tag observations and zero planning scans; Gap 9 remains routed to Phase 4/5 acceptance. |
+| FR-7.5/7.8; tagger/SLP006 | COMPLETE | §28 and §36.8 now require spike success or Brad's explicit scope decision. |
+| FR-8.2/8.3; SLP003 | COMPLETE | §30 denies additive prefixes before fix creation; §36.9 tests only/just and ordinary denial. |
+| FR-9.1; stemmer | COMPLETE as specified; delivery test retained | §32's three-letter final-e floor makes make/makes/making → mak and cache/caches/cached/caching → cach; §36.10 retains assertions on the shipped backend (Gap 8). |
+| FR-2.7; metrics/config/report | PARTIAL, awaits Gap 5 | No approved change to fixed report floors. OD-3 describes the options; decision remains Brad's. |
+
+The delta's dependencies remain downward: cached Segments are under text/doc, windows reads Prose, and verify reads only text/doc/types. Test-only counters are absent in production; the scan counter is thread-local and the tag counter belongs to each Prose. Actual tests/layering.rs and docs/DEVELOPMENT.md were read for the available conventions. Requested docs/context/README.md and conventions.md still return missing-file errors; Gap 10 remains ACCEPT. No claim of checking absent conventions is made.
+
+The revised test seams match src/engine/mod.rs:19–42 and tests/common/mod.rs:65–108. tests/rules_fixtures.rs:303–356 confirms why no-finding counter-contexts must use the new dedicated test instead of the existing unchanged array. No build/test was run: this round edits review documentation and the proposed feature/tests do not yet exist. Author scratch-compile claims are not counted as reviewer-executed validation.
+
+### Outstanding decisions and delivery routing
+
+No decisions file exists and context decisions_log is none. Gaps 4, 5 and 11 remain DECIDE with their round-1 questions/options/recommendations; SPEC OD-1/OD-3/OD-2 now acknowledges each. Drafting a recommended option does not settle it. The reviewer continues to recommend default-on SLP001 rows with separate detection-only intensifiers (Gap 4), configurable report floors (Gap 5), and literal model protection with narrow Safe compatibility (Gap 11).
+
+Gaps 8 and 9 remain DEFER to their existing Phase 6 and Phase 4/5 owners. Their mechanisms are now specified; delivery must still implement and execute the retained tests. No new DEFER, ACCEPT or separately numbered gap is introduced. Round-2 recommendation is fix_spec for Gap 2 alone; open_fixes is no because no MEDIUM/LOW FIX remains.
+
+## Round 3
+
+### Earlier FIX re-check
+
+| Gap | Result | Verified correction or remaining evidence |
+|-----|--------|------------------------------------------|
+| 1 | RESOLVED (round 2), re-verified round 3 | SPEC §4:333–354 retains cached sentence_span arithmetic; §5:514–537 consumes the pass's Prose and deletes sentence_range. §5:574–602 retains the actual scan-count planning test. ADR-02/03 retain the per-pass owner and private scan helpers. No delta changes this correction. |
+| 2 | STILL OPEN | SPEC §20:1602–1670 replaces the flat whitelist with per-noun lists and a two-word lookahead. It rejects the round-2 relative examples, but still accepts the coordinated complement below. |
+| 3 | RESOLVED (round 2), re-verified round 3 | SPEC §30:2738–2759 retains ADDITIVE and calls denies before attaching a template fix; only/just remain excluded. Unchanged by this delta. |
+| 6 | RESOLVED (round 2), re-verified round 3 | Architecture §2:36–53, §4.1–4.2 and Revision Log:770–782 retain the absorbed cache, helper, lexicon, unknown-tag, behavioral-test, Detected, duplicate-code, report-line, version and command changes. ADR-02/03/06 retain the owning decisions. SPEC Architecture Deviation Notes leave only the explicitly decision-dependent meaning signature. Architecture/ADRs are unchanged in the snapshot. |
+| 7 | RESOLVED (round 2), re-verified round 3 | SPEC §28:2593–2599 still halts Phase 4 after a failed spike and requires correction or Brad's explicit scope decision; architecture §12 and Revision Log:783–786 retain the same policy. Unchanged by this delta. |
+
+Changed since round 2: snapshot stat reports only SPEC-classical-nlp.md changed (135 lines). Ran both stat and diff. Read version 0.3's Revision Log:3455–3472 and reviewed the §20 guard, fixtures/design notes, §36.5 test rows and Self-Audit changes. PRD, architecture and ADRs are unchanged; there is no UX artifact in the initiative tree.
+
+### Gap 2 continuation: infinitive lookahead does not prove the deleted noun has no later dependents
+
+**Status:** STILL OPEN  
+**Severity:** HIGH  
+**Origin:** fix-regression (revised guard; original round-1 finding remains recorded above)  
+**Disposition:** FIX-SPEC  
+**Requirements:** PRD D-10:125–129, FR-5.1–FR-5.3:187–189.  
+**Evidence:** SPEC §20 row table:1577, DECISION/NOT_AFTER_TO/next_word/context_allows:1624–1670, fixture list:1722–1740; §36.5:3127–3132. Actual replacement mechanism: src/rules/helpers.rs:35–65; Safe/default-on rule and fix attachment: src/rules/builtin/slp001_ai_vocabulary_replaceable.rs:37–48, :62–79. Safe proposals apply through src/pipeline/mod.rs:113–125; src/verify/mod.rs:91–143 checks tokens/structure/protection, not grammar. SPEC §23's added meaning checks do not add a grammar check.
+
+**Trigger/result:** “We made a decision to leave and a plan to return.” is grammatical: made governs both a decision and a plan. The revised guard reads word = to, then = leave. DECISION admits to; leave is neither a relative pronoun nor a blocked determiner. The Safe replacement is therefore “We decided to leave and a plan to return.” The second coordinated noun phrase has lost its governing verb. The immediate “decision and a plan” negative does not exercise a coordination after the infinitive complement.
+
+**Verification in this session:** read the exact row, guard and real replacement mechanism. A literal Python reproduction of the changed alphabetic-word extraction and three membership predicates printed guard_accepts = True and the broken output above. This is a predicate reproduction, not compilation or execution of the proposed feature. The proposed tests are not implemented yet.
+
+**Why HIGH rather than DEFER:** default rules-only fixing violates the settled grammatical Safe contract. All thirteen specified negatives and the positive “They made a decision to leave.” can pass; none covers a later coordinated noun phrase. Idempotency also passes, and neither the existing verifier nor the planned meaning checks detect this lost syntactic relationship. No named later gate forces this counter-context into view. This is the same unresolved proof obligation as Gap 2, not a new finding on unrelated unchanged text.
+
+**Required correction:** require enough context to prove that a retained complement has no later dependency on the deleted noun or its original governing verb; otherwise drop the affected match/context or omit the row, as §20 already permits. A wider finite word blacklist alone does not establish that property. Add this exact input as a no-finding/unchanged regression, and audit the admitted complements for delayed coordination before claiming them Safe. Preserve FR-10's no-new-model-window contract. This correction is independent of OD-1 and requires no new product decision.
+
+**Confidence:** 99%.
+
+### Delta alignment, coverage and feasibility
+
+| Requirement / owner | Current design status | Evidence |
+|---------------------|-----------------------|----------|
+| D-10, FR-5.1–FR-5.3; SLP001 / architecture §4.9 / ADR-08 | PARTIAL | §20 rejects both round-2 relative inputs and the newly listed immediate noun modifiers, but the to + infinitive path still admits Gap 2's delayed coordination. Placement remains conditional on OD-1. |
+| FR-5.2, FR-5.5; wordiness fixtures | PARTIAL for Safe grammar; idempotency mechanism retained | §20 and §36.5 consistently specify thirteen negative inputs and four positive grammar examples. Their existing fixture helper signatures fit the planned tests, but the negative set omits the trigger above. |
+| FR-10.3; window eligibility | COMPLETE as specified | The failed-guard branch still drops the match rather than attaching a fix-less Safe finding. No new model-selection path is introduced by the delta. |
+
+No new architecture boundary or dependency is introduced: the context guard stays inside the rule and uses WordList's existing (source range, replacement) results. The per-noun lists and next_word are feasible with that interface. The changed test descriptions agree with tests/rules_fixtures.rs:303–356: its unchanged list expects a finding without a fix, so no-finding cases correctly use the dedicated regression instead.
+
+The missing docs/context/README.md and conventions.md were re-requested in this session and returned missing-file errors. Gap 10 remains ACCEPT; no absent convention pack is claimed reviewed. The root README and actual rule/helper/pipeline/verifier code were read for the delta's reached contracts. No project build or test was run: only review documentation changes, and the proposed feature/tests are not yet implemented. Author scratch-build claims are not reviewer validation.
+
+### Outstanding decisions and delivery routing
+
+The directive directory contains only gap-analysis.md and deferred.md; context decisions_log remains none. SPEC Open Decisions:3270–3280 retains OD-1/OD-2/OD-3 as explicitly unsettled. Gaps 4, 5 and 11 therefore remain DECIDE, with the existing options and recommendations preserved: default-on SLP001 rows plus separate detection-only intensifiers; configurable report floors; literal model-name protection with narrow Safe compatibility, respectively.
+
+Gaps 8 and 9 remain routed to their existing Phase 6 and Phase 4/5 delivery owners in deferred.md. No new finding, decision or deferred item is introduced. Recommendation: fix_spec for the still-open Gap 2 alone. open_fixes: no (no MEDIUM/LOW FIX remains).
+
+## Round 4
+
+### Earlier FIX re-check
+
+| Gap | Result | Verified correction or retained evidence |
+|-----|--------|------------------------------------------|
+| 1 | RESOLVED (round 2), re-verified round 4 | SPEC §4:303–354 retains cached word/sentence lookup and sentence_span arithmetic; §5 retains planning_does_not_rescan (:578, §36.1:3123). ADR-02 Decision requires every consumer, including windows, to use the pass's Prose. Architecture Revision Log:764–771 retains the cache/interface correction. Snapshot confirms no change to these sections. |
+| 2 | RESOLVED (round 4) | SPEC §20:1658–1695 now checks every remaining word in the noun's sentence. The round-3 input has more than two tail words and decision has fronted=false, so neither accepting tail branch matches. The same reasoning rejects delayed comparisons and noun appositions; punctuation/markup in a two-word tail fails source-gap/closer checks. §20:1753–1774 and §36.5:3184–3185 require twenty no-finding/unchanged regressions, including the exact round-3 input, while retaining positive grammar fixtures. |
+| 3 | RESOLVED (round 2), re-verified round 4 | SPEC §30:2795–2820 retains the sorted ADDITIVE list and calls denies before fix construction. Both only and just remain excluded. This section is unchanged in the snapshot. |
+| 6 | RESOLVED (round 2), re-verified round 4 | Architecture Revision Log:772–782 retains all ten absorbed changes. ADR-02/03/06 and architecture are unchanged in the snapshot. SPEC §20 now consumes the already-owned RuleCtx.prose; it introduces no new architectural deviation. |
+| 7 | RESOLVED (round 2), re-verified round 4 | SPEC §28:2649–2656 explicitly stops Phase 4 on spike failure and requires correction or Brad's scope decision before continuing. Architecture Revision Log:783–786 retains that policy. Neither is changed by this delta. |
+
+Changed since round 3: snapshot stat reports only SPEC-classical-nlp.md changed (335 lines). Ran snapshot stat and diff; read version 0.4's Revision Log:3532–3555. Changes concern §20's sentence-tail guard and fixtures, §36.5, and associated version, compile-check and Self-Audit notes. PRD, architecture and ADRs are unchanged. The initiative listing still has no UX artifact.
+
+### Delta passes and coverage
+
+| Requirement / owner | Current design status | Evidence |
+|---------------------|-----------------------|----------|
+| D-10, FR-5.1–FR-5.3; SLP001 / architecture §4.9 / ADR-02/08 | COMPLETE for the reviewed guard; placement awaits Gap 4 | §20:1658–1695 accepts a noun at sentence end, exactly a listed complement/subordinator plus one word, or a sentence-opening adverbial before comma + subject pronoun. Verb rows cannot use the fronted escape. The formerly admitted delayed dependency is rejected structurally rather than by another joining-word blacklist. Conservative recall loss is expressly documented at :1806–1812; uncertain contexts produce no finding, retaining earlier accepted routing. |
+| FR-5.2/5.5; fixtures | COMPLETE as specified | §20:1748–1775 requires a positive/fixed sentence for every added row, twenty negative contexts and idempotency. §36.5 repeats the same regression set. No claim that future tests already pass. |
+| FR-10.3, NFR-2; eligibility and cached analysis | COMPLETE as specified | §20 allowed reads the existing pass's segments and drops declined matches; it neither scans sentences again nor emits fix-less Safe findings that select model windows. |
+
+Alignment/coverage/literal/edge-case review covered the three admitted tail shapes, noun compounds, relative clauses, delayed coordination/comparison, comma appositions, fronted verb rows, protected/markup gaps, missing sentence lookup, and positive infinitive/adverbial cases. No new finding meets the reporting bar. Earlier accepted/deferred intent and the settled PRD decisions are not reopened.
+
+Feasibility: opened src/rules/helpers.rs:35–76: WordList::find returns source ranges and excludes OBJ-spanning matches. SPEC §4:303–318 supplies the exact word_before/word_at/sentence_of APIs; §9:919 re-exports Word. SPEC §20 works on those source coordinates and the pass's existing segmentation. Opened actual src/rules/mod.rs:84–114: RuleCtx.prose is a planned Phase 1 addition rather than an existing field, correctly ordered before Phase 2. Opened tests/rules_fixtures.rs:303–356: the existing unchanged array requires findings without fixes, so the dedicated no-finding regression is still necessary and correctly specified.
+
+Requested docs/context/README.md and conventions.md both returned missing-file errors in this session; Gap 10 remains ACCEPT. Read the root README for the available product/runtime constraints. No project build or test was run: only review documentation was edited and the proposed feature tests are not implemented. The author's stand-in scratch compilation is not reviewer-executed validation.
+
+### Outstanding decisions and delivery routing
+
+No decisions file exists in the directive listing; context decisions_log is none. Gaps 4, 5 and 11 remain DECIDE with the original options and recommendations. The most consequential is Gap 11's public name-protection guarantee. All three must reach Brad at the next human stop, never be resolved by the author. Gaps 8 and 9 retain their named Phase 6 and Phase 4/5 owners in deferred.md; no new deferred item is added.
+
+Round 4 new gaps: BLOCKING 0, HIGH 0, MEDIUM 0, LOW 0; all dispositions 0. Current retained findings: HIGH 1, MEDIUM 4, LOW 2; DECIDE 3, DEFER 2, ACCEPT 2; open FIX 0. Recommendation: proceed. has_decisions: yes. open_fixes: no.
+
+
+
