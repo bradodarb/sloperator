@@ -66,7 +66,7 @@ epic-09-backlog: epic-08-eval
 - PRD gate Q1–Q8: all assumed options, built as the SPEC's DQ-0 records them. This means a self-contained crate,
   explicit `model pull` with exit 2 when the model is missing, verified model rewrites written by `--fix`, Qwen3-4B
   Q4_K_M as the default after the spike, `sloperator.toml` with snake_case keys, the CLI surface as written, the
-  FR-1.9 banner, and the MIT OR Apache-2.0 licence.
+  FR-1.9 banner, and the MIT licence.
 - Q7 follow-up and SPEC gate Gap 11 / OD-1 (distribution binaries): Brad confirmed that Q7 governs only building the
   crate, and that a CI/CD process for distribution binaries is **out of scope for now**. No story builds
   release archives or a `sloperator.package` target. `make build` produces only the host binary (SPEC §3).

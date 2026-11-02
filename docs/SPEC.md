@@ -1016,7 +1016,7 @@ pub struct PatternRule { pub set: regex::RegexSet, pub regexes: Vec<regex::Regex
 **Component:** §4.6 rules (ADR-06); architecture §6 fixtures
 **Implements:** FR-4.2, FR-4.3, FR-4.6, FR-4.7, D-4
 
-The catalogue has 16 rules across all nine families (FR-4.2). Every rule is in the default set for v0.1.0, and
+The catalogue has 17 rules across all nine families (FR-4.2). Every rule is in the default set for v0.1.0, and
 `since = "0.1.0"`.
 
 | Code | Name | Family | Severity | Fix | Detects | Safe fix |
@@ -1037,8 +1037,9 @@ The catalogue has 16 rules across all nine families (FR-4.2). Every rule is in t
 | SLP014 | `em-dash-density` | EmDash | warning | safe | em dashes (U+2014, or ` -- ` in prose) above `max_per_1000_words` (3) per 1,000 prose words in the file; once over the threshold, one finding per dash | a dash between words → ", " |
 | SLP015 | `ai-disclaimer` | ChatbotResidue | error | model | "As of my last (knowledge) update", "As an AI language model" | — |
 | SLP016 | `summary-signpost` | SignificancePuffery | suggestion | safe | "In conclusion,", "In summary,", "Overall,", or "Ultimately," at the start of a block's last sentence | delete it and capitalise |
+| SLP017 | `decorative-emoji` | Markup | warning | safe | pictographic emoji in prose, one finding per grapheme cluster (ZWJ sequence, skin tone, flag, keycap): supplementary-plane `Extended_Pictographic`, BMP `Emoji_Presentation` (✅, ⏳), other BMP pictographs (©, ®, ™) only with U+FE0F, digits/`#`/`*` only as keycaps | delete the emoji (a space-separated cluster at once) and one adjacent space: the one after, or the one before at a line end or before closing punctuation; no fix when it is the only prose on its line (bare list item, heading) or sits between letters or after opening markup |
 
-**Fixture contract (FR-4.6).** `tests/rules_fixtures.rs` uses a macro, `rule_fixtures!(1, 2, …, 16)`. For each
+**Fixture contract (FR-4.6).** `tests/rules_fixtures.rs` uses a macro, `rule_fixtures!(1, 2, …, 17)`. For each
 code it generates `slpNNN_positive_fires`, `slpNNN_negative_silent` and, for safe rules only,
 `slpNNN_fix_matches`. A further test, `every_rule_has_fixtures`, walks `Registry::builtin()` and fails if any of
 these holds:
@@ -1058,6 +1059,10 @@ text inside inline code, a fenced block and a link destination, which proves FR-
   forbid, so verify would reject every such rewrite. The honest class is `none` (PRD Deviation Notes: D-4).
 - **SLP014 is a density rule (FR-4.3).** Below the threshold it reports nothing. Above it, the safe fixes bring the
   file back under. Configure it with `[rules.SLP014] max_per_1000_words`.
+- **SLP017 never leaves empty markup.** Deleting an emoji that is a list item's or heading's whole body would leave
+  an empty bullet or heading, so such an emoji, and one alone on its line, is flagged with no fix. ©, ® and ™ are
+  `Extended_Pictographic` but read as plain symbols in prose, so they count only when U+FE0F asks for emoji
+  presentation.
 - **The safe-fix rule (Gap 2).** A finding carries a fix only if the replacement is grammatical and keeps meaning
   in *every* context the matcher can see. So a safe fix may never depend on part of speech or subject agreement that
   the matcher cannot observe. Concretely: (1) verb entries are listed per inflection, each with its own replacement,
@@ -2394,7 +2399,7 @@ The tests listed in §5. They cover FR-1.8, NFR-2 and FR-9.1.
 
 | # | Question | Resolution |
 |---|----------|------------|
-| DQ-0 | Brad's PRD-gate answers | Built exactly as given: Q1 (a) one self-contained crate (now the repository root, D-2); Q2 (a) explicit `model pull`, exit 2 when the model is missing; Q3 (a) verified model rewrites written by `--fix`, with `--diff` available; Q4 (a) Qwen3-4B Q4_K_M as default after the spike; Q5 (a) `sloperator.toml` with snake_case keys; Q6 the CLI surface as written; Q7 a missing tool prints a one-line banner and the target fails (§3, FR-1.9); Q8 MIT OR Apache-2.0; fine-tuning deferred; in-process runtime only. His follow-up on distribution binaries is OD-1. |
+| DQ-0 | Brad's PRD-gate answers | Built exactly as given: Q1 (a) one self-contained crate (now the repository root, D-2); Q2 (a) explicit `model pull`, exit 2 when the model is missing; Q3 (a) verified model rewrites written by `--fix`, with `--diff` available; Q4 (a) Qwen3-4B Q4_K_M as default after the spike; Q5 (a) `sloperator.toml` with snake_case keys; Q6 the CLI surface as written; Q7 a missing tool prints a one-line banner and the target fails (§3, FR-1.9); Q8 MIT; fine-tuning deferred; in-process runtime only. His follow-up on distribution binaries is OD-1. |
 | DQ-1 | Integration-tier JUnit location (gate DEFER 1) | `target/nextest/it/junit.xml`, written by the `it` nextest profile (§2) that `make test-integration` runs (§3). The unit tier writes `target/nextest/ci/junit.xml` and the perf pass `target/nextest/ci-perf/junit.xml`. |
 | DQ-2 | How do test selectors reach nextest? (gate DEFER 2) | `make test TESTS='<selector> ...'`: the `Makefile` reads `TESTS` through `$(origin TESTS)` (so an unset `TESTS` adds no filter) and maps the words to one nextest filterset (§3). Probed under GNU make (§3). |
 | DQ-3 | FR-9.5 "no more" vs PRD Risk 2 "does not lower" (gate DEFER 3) | **Strictly fewer** weighted findings in the window. A rewrite that does not lower the count adds unverifiable risk (names, polarity) for no gain. |

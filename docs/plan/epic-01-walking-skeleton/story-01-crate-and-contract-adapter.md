@@ -22,8 +22,7 @@ Create the crate exactly as SPEC §2 pins it: Cargo.toml with `default = ["model
 | `.config/nextest.toml` | new | profiles ci, ci-perf, it with JUnit |
 | `.gitignore` | new | `target/` |
 | `README.md` | new | section headings from SPEC §2; Building section with Phase 0 prerequisites |
-| `LICENSE-MIT` | new | licence text |
-| `LICENSE-APACHE` | new | licence text |
+| `LICENSE` | new | MIT licence text |
 | `Makefile` | new | SPEC §3: build, test, test-integration, check, clean, help; tool guard, JUnit testcase count, TESTS→filterset |
 | `src/lib.rs` | new | module declarations (§4); stub modules |
 | `src/error.rs` | new | `Error`, 11 variants (§4) |

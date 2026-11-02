@@ -3,11 +3,45 @@
 
 # sloperator
 
-Lint and rewrite LLM-generated prose so it reads as human-written. One crate: library `sloperator` and binary
-`sloperator`.
+sloperator makes prose shorter and plainer, whether a person or an LLM wrote it.
 
-It also runs as an MCP server (`sloperator mcp`), so agents can lint and fix text through the same pipeline; see
-[MCP server](#mcp-server).
+## Why
+
+LLMs write faster than we can read. A three-line answer comes back as six paragraphs. We skim, then we stop reading.
+
+Padding makes it worse: openers that say nothing, hedges, filler words, em dashes everywhere. Sometimes it's AI slop.
+Often it's just too long.
+
+## What it does
+
+- 17 deterministic rules catch padding and AI tics, and fix the safe ones.
+- A small local model tightens what's left.
+- Every rewrite is verified before it's kept. If it drops a number, a link or a code block, or doesn't reduce the
+  findings, the original stays.
+- Nothing leaves your machine.
+- It also runs as an MCP server (`sloperator mcp`), so an agent can tighten its own writing before you read it. See
+  [MCP server](#mcp-server).
+
+It ships as one crate: a library and a binary, both named `sloperator`.
+
+## Example
+
+This is `sloperator check --fix` with the default model (qwen3-4b). Model output can vary by seed.
+
+Before:
+
+```text
+🚀 In today's fast-paced digital landscape, it's important to note that AI-generated content has become more than just a convenience — it's a fundamental paradigm shift in how we communicate. ✨ That's why I'm absolutely thrilled to unveil sloperator, a game-changing, cutting-edge tool that seamlessly delves into the rich tapestry of your prose. 💡 Moreover, it's not just a linter, but a comprehensive, holistic solution that empowers writers to unlock the full potential of their words. 🔥 Furthermore, by leveraging a local model alongside 16 robust rules, sloperator ensures your text is clear, concise, and compelling — all without ever sending a single word to the cloud. 🌟 In conclusion, whether you're a developer, a marketer, or a storyteller, sloperator is the ultimate partner on your transformative writing journey. Let's dive in! 👇
+```
+
+After:
+
+```text
+AI-generated content is more than a convenience; it's a fundamental shift in communication. I'm thrilled to introduce sloperator, a game-changing tool that analyzes your prose. It's not just a linter but a comprehensive solution that helps writers maximize their words. Using a local model with 16 robust rules, sloperator ensures your text is clear, concise, and compelling without sending any words to the cloud. Whether you're a developer, marketer, or storyteller, sloperator is your key partner in writing. Let's begin.
+```
+
+129 words down to 82: same message, a third shorter. One finding remains (`not just a linter but`), and sloperator
+reports it rather than hiding it.
 
 ## Install
 
@@ -210,7 +244,7 @@ and the `Registry`. `rules::RuleCode` and `rules::Proposal` are re-exports from 
   (SLP900 and above) is never suppressed.
 - `Registry::builtin()` is built once. `get(code)` and `default_set()` query it. System codes SLP901 and SLP902 are
   not rules and are never in it.
-- The v0.1.0 catalogue is 16 rules (SLP001-SLP016) across all nine families, all on by default with
+- The v0.1.0 catalogue is 17 rules (SLP001-SLP017) across all nine families, all on by default with
   `since = "0.1.0"`. `tests/rules_registry.rs` pins this: `default_set_is_explicit` compares `default_set()` with a
   literal list, so changing the defaults shows up as a test diff, and `new_rules_start_off` fails when a rule whose
   `since` is newer than 0.1.0 is `default_on` (FR-4.5).
@@ -254,6 +288,14 @@ and the `Registry`. `rules::RuleCode` and `rules::Proposal` are re-exports from 
     and reports each one only when the count per 1,000 prose words is above `max_per_1000_words` (3). The fix turns a
     dash between two words, with one space on each side when present, into ", "; a dash next to punctuation, a
     non-prose run or a block edge gets no fix.
+  - SLP017 `decorative-emoji` (`builtin/slp017_*`, severity `warning`, `Safe`, family Markup) reports each pictographic
+    emoji in prose, one finding per grapheme cluster, so a ZWJ sequence, skin tone, flag or keycap counts once. A
+    supplementary-plane `Extended_Pictographic` code point or a BMP one with default emoji presentation (✅, ⏳) is an
+    emoji; any other BMP pictograph (©, ®, ™, ↔) only when U+FE0F follows it, and a digit, `#` or `*` only as a
+    keycap. The fix deletes a cluster of emoji (separated only by spaces) with one adjacent space: the space after it,
+    or the space before it when the line ends or closing punctuation follows (`so far 💪.` → `so far.`). An emoji
+    that is the only prose on its line (a bare list item or heading) or sits between letters or after opening markup
+    is flagged with no fix.
 - `directives::Suppressions` holds the suppressed lines. `Default` suppresses nothing; `is_suppressed(line, code)` and
   `frozen_ranges()` are the queries. `with_lines` and `with_file_ignored` (`#[doc(hidden)]`) build a value by hand
   for tests.

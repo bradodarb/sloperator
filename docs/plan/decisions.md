@@ -35,7 +35,7 @@ Q4. Default model and licence. (a) Qwen3-4B Q4_K_M after the spike [assumed], wi
 Q5. Config keys depart from the camelCase config-key convention. (a) sloperator.toml with snake_case keys, because the tool leaves the repo and follows Rust idiom [assumed, recommended]; (b) camelCase keys in TOML; (c) YAML. Recommend (a), but only Brad can waive a non-negotiable.
 Q6. New CLI surface for the public tool: check/--fix/--diff, rules, config, model pull|list|path; output formats text|concise|json|github; exit codes 0/1/2; exit 1 at warning or above (Q6/Q7). Recommend accepting it as written.
 Q7. Machines without Rust (FR-1.9). (a) every make target fails with a one-line banner naming the missing tool and its install step [recommended]. Recommend (a): it fails loudly.
-Q8. Code licence: (a) MIT OR Apache-2.0 [assumed, recommended]; (b) MIT; (c) proprietary until release.
+Q8. Code licence: MIT.
 Other questions with sound defaults (Q8 fine-tuning deferred, Q11 in-process runtime only): accept the assumptions unless Brad objects.
 
 **Brad:** all assumed/recommended options look solid, but I do want to confirm that Q7 is really around building the project, right? we should be able to build binaries for distribution on any machine, correct?
