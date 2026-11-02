@@ -203,7 +203,7 @@ and the `Registry`. `rules::RuleCode` and `rules::Proposal` are re-exports from 
   (SLP900 and above) is never suppressed.
 - `Registry::builtin()` is built once. `get(code)` and `default_set()` query it. System codes SLP901 and SLP902 are
   not rules and are never in it.
-- The v0.1.0 catalogue is 16 rules (SLP001-SLP016) across all nine families, all on by default with
+- The v0.1.0 catalogue is 17 rules (SLP001-SLP017) across all nine families, all on by default with
   `since = "0.1.0"`. `tests/rules_registry.rs` pins this: `default_set_is_explicit` compares `default_set()` with a
   literal list, so changing the defaults shows up as a test diff, and `new_rules_start_off` fails when a rule whose
   `since` is newer than 0.1.0 is `default_on` (FR-4.5).
@@ -247,6 +247,14 @@ and the `Registry`. `rules::RuleCode` and `rules::Proposal` are re-exports from 
     and reports each one only when the count per 1,000 prose words is above `max_per_1000_words` (3). The fix turns a
     dash between two words, with one space on each side when present, into ", "; a dash next to punctuation, a
     non-prose run or a block edge gets no fix.
+  - SLP017 `decorative-emoji` (`builtin/slp017_*`, severity `warning`, `Safe`, family Markup) reports each pictographic
+    emoji in prose, one finding per grapheme cluster, so a ZWJ sequence, skin tone, flag or keycap counts once. A
+    supplementary-plane `Extended_Pictographic` code point or a BMP one with default emoji presentation (✅, ⏳) is an
+    emoji; any other BMP pictograph (©, ®, ™, ↔) only when U+FE0F follows it, and a digit, `#` or `*` only as a
+    keycap. The fix deletes a cluster of emoji (separated only by spaces) with one adjacent space: the space after it,
+    or the space before it when the line ends or closing punctuation follows (`so far 💪.` → `so far.`). An emoji
+    that is the only prose on its line (a bare list item or heading) or sits between letters or after opening markup
+    is flagged with no fix.
 - `directives::Suppressions` holds the suppressed lines. `Default` suppresses nothing; `is_suppressed(line, code)` and
   `frozen_ranges()` are the queries. `with_lines` and `with_file_ignored` (`#[doc(hidden)]`) build a value by hand
   for tests.

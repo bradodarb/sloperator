@@ -18,6 +18,7 @@ mod slp013_chatbot_opener;
 mod slp014_em_dash_density;
 mod slp015_ai_disclaimer;
 mod slp016_summary_signpost;
+mod slp017_decorative_emoji;
 
 pub fn all() -> Vec<Box<dyn Rule>> {
     vec![
@@ -37,5 +38,6 @@ pub fn all() -> Vec<Box<dyn Rule>> {
         slp014_em_dash_density::rule(),
         slp015_ai_disclaimer::rule(),
         slp016_summary_signpost::rule(),
+        slp017_decorative_emoji::rule(),
     ]
 }

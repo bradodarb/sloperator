@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **SLP017 `decorative-emoji`** (warning, safe fix, on by default): flags pictographic emoji in prose, one finding
+  per visible emoji (ZWJ sequences, skin tones, flags and keycaps count once), and deletes each with one adjacent
+  space. Plain ©, ® and ™ are not flagged; an emoji that is a bare list item or heading is flagged with no fix. The
+  catalogue is now 17 rules.
 - **MCP server:** `sloperator mcp` serves `lint`, `fix`, `rules` and `explain_rule` over stdio, behind the default
   `mcp` feature (ADR-10, docs/MCP.md). Text in, text out: it never writes files. The model loads lazily, is used
   serially and unloads after `--idle-unload` seconds (default 600; 0 = never). `--rules-only` turns it off.
