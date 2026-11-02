@@ -21,7 +21,7 @@ fn at_least_15_rules_covering_nine_families() {
     let codes: BTreeSet<RuleCode> = reg.all().map(|r| r.meta().code).collect();
     assert_eq!(codes.len(), reg.all().count(), "duplicate rule codes");
     assert!(codes.len() >= 15, "{} rules", codes.len());
-    assert_eq!(codes.len(), 16, "the v0.1.0 catalogue has 16 rules");
+    assert_eq!(codes.len(), 17, "the v0.1.0 catalogue has 17 rules");
     let families = [
         Family::AiVocabulary,
         Family::NegativeParallelism,
@@ -64,6 +64,7 @@ fn every_rule_has_code_name_severity_state_fix() {
         (14, (Warning, Safe)),
         (15, (Error, Model)),
         (16, (Suggestion, Safe)),
+        (17, (Warning, Safe)),
     ]
     .into_iter()
     .collect();
@@ -119,7 +120,7 @@ fn every_rule_has_code_name_severity_state_fix() {
 /// FR-4.5: the default set is compared with a literal list, so any change to the defaults shows up as a diff.
 #[test]
 fn default_set_is_explicit() {
-    let want: BTreeSet<RuleCode> = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+    let want: BTreeSet<RuleCode> = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
         .into_iter()
         .map(RuleCode)
         .collect();

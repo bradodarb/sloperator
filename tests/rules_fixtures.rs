@@ -189,6 +189,12 @@ rule_fixtures!(
         slp016_negative_silent,
         slp016_fix_matches
     ),
+    safe(
+        17,
+        slp017_positive_fires,
+        slp017_negative_silent,
+        slp017_fix_matches
+    ),
 );
 
 #[test]
@@ -373,6 +379,71 @@ fn slp014_no_fix_unless_between_words() {
     let found = findings(14, &d);
     assert_eq!(found.len(), 4, "{found:?}");
     assert!(found.iter().all(|f| f.fix.is_none()), "{found:?}");
+}
+
+/// One visible emoji is one finding: a ZWJ sequence, a skin tone, a flag and a keycap each count once.
+#[test]
+fn slp017_one_finding_per_visible_emoji() {
+    let d = parse(
+        "Team \u{1F468}\u{200D}\u{1F4BB} wins \u{1F44D}\u{1F3FD} in \u{1F1FA}\u{1F1F8} at 1\u{FE0F}\u{20E3} now.\n",
+    );
+    let marks: Vec<&str> = findings(17, &d)
+        .iter()
+        .map(|f| &d.src[f.range.clone()])
+        .collect();
+    assert_eq!(
+        marks,
+        [
+            "\u{1F468}\u{200D}\u{1F4BB}",
+            "\u{1F44D}\u{1F3FD}",
+            "\u{1F1FA}\u{1F1F8}",
+            "1\u{FE0F}\u{20E3}"
+        ]
+    );
+}
+
+/// The four space cases of the fix, and an emoji cluster that ends a line.
+#[test]
+fn slp017_fix_takes_one_adjacent_space() {
+    for (src, want) in [
+        ("\u{1F680} Just\n", "Just\n"),
+        ("so far \u{1F4AA}.\n", "so far.\n"),
+        ("by Friday \u{1F91E}, assuming\n", "by Friday, assuming\n"),
+        ("this! \u{1F64C}\n", "this!\n"),
+        ("done \u{1F389} \u{1F389}\n", "done\n"),
+        ("done\u{1F389}. Next\n", "done. Next\n"),
+        ("# Release \u{1F680}\n", "# Release\n"),
+    ] {
+        assert_eq!(apply_fixes(17, src), want, "{src:?}");
+    }
+}
+
+/// An emoji that is the only prose on its line (a bare bullet, a heading, a line of its own) or sits where deleting
+/// it would join words or break markup is flagged with no fix, so no empty bullet is left behind.
+#[test]
+fn slp017_no_fix_when_deleting_breaks_the_text() {
+    for src in [
+        "- \u{2705}\n- Done\n",
+        "# \u{1F680}\n",
+        "Intro.\n\n\u{1F389}\n\nOutro.\n",
+        "a\u{1F389}b\n",
+        "**\u{1F389} Done**\n",
+    ] {
+        let d = parse(src);
+        let found = findings(17, &d);
+        assert_eq!(found.len(), 1, "{src:?}: {found:?}");
+        assert!(found[0].fix.is_none(), "{src:?} has a fix");
+        assert_eq!(apply_fixes(17, src), src);
+    }
+}
+
+/// Plain ©, ® and ™ are prose; with the emoji selector U+FE0F they are emoji. Code, links and fences are protected.
+#[test]
+fn slp017_plain_symbols_and_protected_spans_silent() {
+    assert!(findings(17, &parse("\u{A9} 2026, \u{AE}, \u{2122}, #1 and 3 * 4.\n")).is_empty());
+    assert_eq!(findings(17, &parse("Logo \u{A9}\u{FE0F} here.\n")).len(), 1);
+    let protected = "Run `echo \u{1F680}` or see [notes](https://example.com/\u{1F680}).\n\n```\n\u{1F680}\n```\n";
+    assert!(findings(17, &parse(protected)).is_empty());
 }
 
 #[test]
