@@ -229,7 +229,8 @@ unknown-git = "deny"
 `.gitignore` contains `/target`, which also covers the nextest JUnit reports under `target/nextest/` and the perf
 build under `target/perf/`.
 
-**README.md** sections (each one a deliverable the tests or reviewers check):
+**README.md** and `docs/REFERENCE.md` / `docs/DEVELOPMENT.md` sections (each one a deliverable the tests or reviewers
+check; the reference detail lives in those two docs):
 - Usage: `check`, `--fix`, `--diff`, input forms, exit codes, output formats, directives, config reference.
 - Score formula (FR-5.1): the formula from §11, with the weights.
 - Limits, stating FR-5.4 word for word: "The score measures style tells, not text quality or provenance.
@@ -1131,7 +1132,7 @@ fn round2(v: f64) -> f64 { (v * 100.0).round() / 100.0 }
 
 **Design notes:**
 
-- The README prints this formula and these weights (FR-5.1).
+- `docs/REFERENCE.md` prints this formula and these weights (FR-5.1).
 - Rounding to two decimals keeps the JSON byte-stable (FR-5.3, NFR-6).
 - The score counts the *reported* findings, after `--min-severity`, so the number and the listing agree.
 
@@ -2249,10 +2250,10 @@ The tests listed in §5. They cover FR-1.8, NFR-2 and FR-9.1.
 
 | Test | Verifies |
 |------|----------|
-| `formula_matches_readme` | FR-5.1 |
+| `formula_matches_reference` | FR-5.1 |
 | `overall_is_word_weighted` | FR-5.1 |
 | `identical_input_identical_score` | FR-5.3 |
-| `readme_states_limits` | FR-5.4 |
+| `reference_states_limits` | FR-5.4 |
 
 ### 23.8 `tests/directives.rs`
 

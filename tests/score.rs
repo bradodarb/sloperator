@@ -1,4 +1,4 @@
-//! Score (SPEC §11): the README formula, word-weighted overall, determinism and the README limits text.
+//! Score (SPEC §11): the reference formula, word-weighted overall, determinism and the reference limits text.
 #![allow(clippy::unwrap_used, clippy::expect_used)] // test helpers may unwrap (architecture §8)
 
 use sloperator::rules::{Finding, RuleCode, Severity};
@@ -14,17 +14,17 @@ fn finding(code: u16, severity: Severity) -> Finding {
     }
 }
 
-fn readme() -> String {
-    std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/README.md")).unwrap()
+fn reference() -> String {
+    std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/docs/REFERENCE.md")).unwrap()
 }
 
-/// The README with every run of whitespace collapsed to one space, so a hard-wrapped sentence still matches.
+/// The text with every run of whitespace collapsed to one space, so a hard-wrapped sentence still matches.
 fn flat(text: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 #[test]
-fn formula_matches_readme() {
+fn formula_matches_reference() {
     // 2 suggestions + 1 warning + 1 error = 2×1 + 1×3 + 1×9 = 14, over 300 prose words.
     let findings = [
         finding(1, Severity::Suggestion),
@@ -39,13 +39,13 @@ fn formula_matches_readme() {
     assert_eq!(s.value, by_hand);
     assert_eq!(s.value, 46.67);
 
-    // The README prints this formula and these weights (FR-5.1).
-    let readme = flat(&readme());
-    assert!(readme.contains("1000 × Σ weight(severity) / max(prose_words, 1)"));
+    // docs/REFERENCE.md prints this formula and these weights (FR-5.1).
+    let reference = flat(&reference());
+    assert!(reference.contains("1000 × Σ weight(severity) / max(prose_words, 1)"));
     assert_eq!(weight(Severity::Suggestion), 1);
     assert_eq!(weight(Severity::Warning), 3);
     assert_eq!(weight(Severity::Error), 9);
-    assert!(readme.contains("suggestion 1, warning 3, error 9"));
+    assert!(reference.contains("suggestion 1, warning 3, error 9"));
 
     // No prose words: the divisor is 1, never zero.
     assert_eq!(score(&findings, 0).value, 14000.0);
@@ -99,14 +99,14 @@ fn identical_input_identical_score() {
 }
 
 #[test]
-fn readme_states_limits() {
-    let readme = flat(&readme());
-    assert!(readme.contains(
+fn reference_states_limits() {
+    let reference = flat(&reference());
+    assert!(reference.contains(
         "The score measures style tells, not text quality or provenance. \
          sloperator does not make text undetectable and makes no such claim."
     ));
     // PRD Risk 1.
-    assert!(readme.contains(
+    assert!(reference.contains(
         "Verification covers numbers, URLs, configured terms, placeholders and block structure, \
          not names or claim polarity."
     ));

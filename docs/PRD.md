@@ -220,10 +220,10 @@ The system SHALL ship a built-in, versioned rule set.
 
 The system SHALL report a transparent slop score.
 
-- FR-5.1: The score SHALL be computed deterministically from the weighted findings normalised per 1,000 prose words, and the formula SHALL be documented in the README.
+- FR-5.1: The score SHALL be computed deterministically from the weighted findings normalised per 1,000 prose words, and the formula SHALL be documented in `docs/REFERENCE.md`.
 - FR-5.2: `check` SHALL report the score per file and an overall score in `text` and `json` output.
 - FR-5.3: Identical input and config SHALL yield an identical score.
-- FR-5.4: The README SHALL state that the score measures style tells, not text quality or provenance, and the tool SHALL NOT claim to make text undetectable.
+- FR-5.4: `docs/REFERENCE.md` SHALL state that the score measures style tells, not text quality or provenance, and the tool SHALL NOT claim to make text undetectable.
 
 ### FR-6: Inline directives
 
