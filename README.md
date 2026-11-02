@@ -9,6 +9,47 @@ Lint and rewrite LLM-generated prose so it reads as human-written. One crate: li
 It also runs as an MCP server (`sloperator mcp`), so agents can lint and fix text through the same pipeline; see
 [MCP server](#mcp-server).
 
+## Install
+
+Prebuilt binaries cover macOS on Apple silicon and Linux on x86_64 and aarch64. Each release is on the
+[releases page](https://github.com/bradodarb/sloperator/releases).
+
+Homebrew (macOS on Apple silicon, Linux):
+
+```sh
+brew tap bradodarb/sloperator https://github.com/bradodarb/sloperator
+brew install bradodarb/sloperator/sloperator
+```
+
+Direct download. Set `TARGET` to `aarch64-apple-darwin`, `x86_64-unknown-linux-gnu` or `aarch64-unknown-linux-gnu`:
+
+```sh
+VERSION=0.1.0
+TARGET=aarch64-apple-darwin
+BASE=https://github.com/bradodarb/sloperator/releases/download/v$VERSION
+curl -fLO "$BASE/sloperator-$VERSION-$TARGET.tar.gz"
+curl -fLO "$BASE/sloperator-$VERSION-$TARGET.tar.gz.sha256"
+shasum -a 256 -c "sloperator-$VERSION-$TARGET.tar.gz.sha256"
+tar -xzf "sloperator-$VERSION-$TARGET.tar.gz"
+sudo install "sloperator-$VERSION-$TARGET/sloperator" /usr/local/bin/
+```
+
+Debian and Ubuntu. Use `amd64` or `arm64`:
+
+```sh
+curl -fLO "https://github.com/bradodarb/sloperator/releases/download/v0.1.0/sloperator_0.1.0_amd64.deb"
+sudo apt install ./sloperator_0.1.0_amd64.deb
+```
+
+The Linux binaries are built on Ubuntu 24.04 (glibc 2.39). An older distribution may need a source build. There is
+no Intel macOS binary, so build from source there as well. See [Development](#development).
+
+Fixes that use the model need it downloaded once (about 2.5 GB):
+
+```sh
+sloperator model pull
+```
+
 ## Usage
 
 ```text
