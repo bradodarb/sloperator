@@ -38,8 +38,9 @@ verified edits to the files. `--rules-only` skips the model and applies only det
 
 `tests/layering.rs` and `tests/standalone.rs` guard the module rules and keep the crate self-contained: no forbidden
 `crate::` edges, no I/O in the pure modules, and no reference to the repository it was developed in.
-`builds_when_extracted` copies the crate (without `.git`, `target/` and `docs/`) to a temp directory and runs
-`cargo test` there offline; it is `#[ignore]`d and runs only in the integration tier.
+`builds_when_extracted` copies every file in the crate except the top-level `.git` and `target/` (so `docs/` is
+included) to a temp directory and runs `cargo test --no-default-features --locked --offline` there; it is
+`#[ignore]`d and runs only in the integration tier.
 
 Design documents live in `docs/` (PRD, SPEC, ARCHITECTURE, ADRs, research), the delivery plan in `docs/plan/` and
 deferred work in `docs/backlog/`.

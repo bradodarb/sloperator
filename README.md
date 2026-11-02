@@ -14,7 +14,7 @@ Often it's just too long.
 
 ## What it does
 
-- 16 deterministic rules catch padding and AI tics, and fix the safe ones.
+- 17 deterministic rules catch padding and AI tics, and fix the safe ones.
 - A small local model tightens what's left.
 - Every rewrite is verified before it's kept. If it drops a number, a link or a code block, or doesn't reduce the
   findings, the original stays.
@@ -44,9 +44,16 @@ I want to circle back on the migration and give a quick update. We're basically 
 
 ## Install
 
-Build from source with `gmake build` (see [Development](docs/DEVELOPMENT.md)). The binary is
-`target/release/sloperator`. Run `sloperator model pull` once for model-backed fixes. Prebuilt binaries and
-Homebrew come with the first release.
+Homebrew (macOS on Apple silicon, Linux):
+
+```sh
+brew tap bradodarb/sloperator https://github.com/bradodarb/sloperator
+brew install bradodarb/sloperator/sloperator
+```
+
+Tarballs and `.deb` packages are on [GitHub Releases](https://github.com/bradodarb/sloperator/releases); the
+[install reference](docs/REFERENCE.md#install) has the download, checksum and `.deb` commands. To build from source,
+see [Development](docs/DEVELOPMENT.md). Run `sloperator model pull` once for model-backed fixes (about 2.5 GB).
 
 ## Quick start
 

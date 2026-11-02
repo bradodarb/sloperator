@@ -525,7 +525,7 @@ Brad is not being asked now. Each question carries the assumption the PRD is wri
   - Assumption: no fine-tuning in v1; Brad sets the threshold after the first untuned results (D-12).
 - [ ] **Question 9 — Machines without the Rust tools.** Options: fail with a one-line banner naming the tool and install step; fail with whatever error the shell gives. Recommendation: the banner, with a non-zero exit. Context: `make` targets call `cargo`, `cargo-nextest` and `cargo-deny`.
   - Assumption: as recommended (FR-1.9).
-- [ ] **Question 10 — Licence of the sloperator code.** Options: MIT OR Apache-2.0 (Rust convention); MIT; proprietary until release. Recommendation: MIT OR Apache-2.0. Context: the standalone repository needs a licence file, and dependencies (`llama-cpp-2` is MIT/Apache-2.0, `pulldown-cmark` MIT) constrain the choice.
+- [ ] **Question 10 — Licence of the sloperator code.** Decision: MIT. Context: the standalone repository needs a licence file, and dependencies (`llama-cpp-2` is MIT/Apache-2.0, `pulldown-cmark` MIT) constrain the choice.
   - Resolved: MIT, in `LICENSE` and `Cargo.toml`.
 - [ ] **Question 11 — In-process model or a client of a local server?** Options: embedded runtime; client of a user-run server (`mistralrs serve`, `ollama`). Recommendation: embedded. Context: a server lowers build weight but "both engines on by default" would then need a running server.
   - Assumption: in-process only (FR-9.1); a server client is out of scope for v1.
