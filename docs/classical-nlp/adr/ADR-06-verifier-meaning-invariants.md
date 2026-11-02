@@ -30,10 +30,19 @@ and the SPEC defines how. A window knows its findings when it computes `weight_b
 
 Option 1. The three checks run after the term check, as multisets: negation count (may fall by at most the
 allowance, may rise), proper-noun proxy (capitalised, non-sentence-initial tokens: equal multisets), modal multiset
-(equal). Sentence-initial status uses `text::segment` (ADR-03).
+(equal). Sentence-initial status uses `text::segment::starts_sentence` on the edit's block text, located with
+`BlockText::to_text` (ADR-03). `Window.codes` keeps one entry per overlapping non-system finding, duplicates included,
+because the allowance counts SLP003/SLP004 findings and a deduplicated list could not count two (review round 1, Gap 6).
 
 ## Consequences
 
 - **Easier:** templates and model rewrites face the same rules; each failure names its `Check`.
 - **Harder:** every `verify::edit` caller passes `resolves`; adding another exempt rule means editing verify's constant list.
 - **Follow-ups:** FR-6.6 regression gate over every Safe fixture in Phase 3; FR-6.7 doc sentence in three places.
+  Which capitalised common words the proper-noun proxy skips (every origin, or only the proven Safe transformations)
+  is open as review round 1 Gap 11 for Brad. This ADR does not decide it.
+
+## Revision Log
+
+- round 1: Gap 6 absorbed. The sentence-initial mechanism is `starts_sentence` + `BlockText::to_text`, and
+  `Window.codes` keeps duplicates (Decision). Gap 11 is noted as open (Follow-ups).
