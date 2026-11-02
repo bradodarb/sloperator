@@ -9,6 +9,17 @@ description = "Lint and rewrite LLM-generated prose so it reads as human-written
 readme = "README.md"
 publish = false
 
+# `cargo deb` packaging for the Linux release builds (.github/workflows/release.yml).
+[package.metadata.deb]
+maintainer = "Brad Murry <bradodarb@hotmail.com>"
+section = "text"
+depends = "$auto"
+assets = [
+    ["target/release/sloperator", "usr/bin/", "755"],
+    ["README.md", "usr/share/doc/sloperator/", "644"],
+    ["LICENSE", "usr/share/doc/sloperator/", "644"],
+]
+
 [features]
 default = ["model", "mcp"]
 model = ["dep:llama-cpp-2"]                  # ADR-02: the only feature that pulls the runtime

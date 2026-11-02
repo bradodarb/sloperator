@@ -14,7 +14,7 @@ Often it's just too long.
 
 ## What it does
 
-- 16 deterministic rules catch padding and AI tics, and fix the safe ones.
+- 17 deterministic rules catch padding and AI tics, and fix the safe ones.
 - A small local model tightens what's left.
 - Every rewrite is verified before it's kept. If it drops a number, a link or a code block, or doesn't reduce the
   findings, the original stays.
@@ -42,6 +42,47 @@ AI-generated content is more than a convenience; it's a fundamental shift in com
 
 129 words down to 82: same message, a third shorter. One finding remains (`not just a linter but`), and sloperator
 reports it rather than hiding it.
+
+## Install
+
+Prebuilt binaries cover macOS on Apple silicon and Linux on x86_64 and aarch64. Each release is on the
+[releases page](https://github.com/bradodarb/sloperator/releases).
+
+Homebrew (macOS on Apple silicon, Linux):
+
+```sh
+brew tap bradodarb/sloperator https://github.com/bradodarb/sloperator
+brew install bradodarb/sloperator/sloperator
+```
+
+Direct download. Set `TARGET` to `aarch64-apple-darwin`, `x86_64-unknown-linux-gnu` or `aarch64-unknown-linux-gnu`:
+
+```sh
+VERSION=0.1.0
+TARGET=aarch64-apple-darwin
+BASE=https://github.com/bradodarb/sloperator/releases/download/v$VERSION
+curl -fLO "$BASE/sloperator-$VERSION-$TARGET.tar.gz"
+curl -fLO "$BASE/sloperator-$VERSION-$TARGET.tar.gz.sha256"
+shasum -a 256 -c "sloperator-$VERSION-$TARGET.tar.gz.sha256"
+tar -xzf "sloperator-$VERSION-$TARGET.tar.gz"
+sudo install "sloperator-$VERSION-$TARGET/sloperator" /usr/local/bin/
+```
+
+Debian and Ubuntu. Use `amd64` or `arm64`:
+
+```sh
+curl -fLO "https://github.com/bradodarb/sloperator/releases/download/v0.1.0/sloperator_0.1.0_amd64.deb"
+sudo apt install ./sloperator_0.1.0_amd64.deb
+```
+
+The Linux binaries are built on Ubuntu 24.04 (glibc 2.39). An older distribution may need a source build. There is
+no Intel macOS binary, so build from source there as well. See [Development](#development).
+
+Fixes that use the model need it downloaded once (about 2.5 GB):
+
+```sh
+sloperator model pull
+```
 
 ## Usage
 
