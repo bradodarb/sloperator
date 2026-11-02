@@ -3,11 +3,45 @@
 
 # sloperator
 
-Lint and rewrite LLM-generated prose so it reads as human-written. One crate: library `sloperator` and binary
-`sloperator`.
+sloperator makes prose shorter and plainer, whether a person or an LLM wrote it.
 
-It also runs as an MCP server (`sloperator mcp`), so agents can lint and fix text through the same pipeline; see
-[MCP server](#mcp-server).
+## Why
+
+LLMs write faster than we can read. A three-line answer comes back as six paragraphs. We skim, then we stop reading.
+
+Padding makes it worse: openers that say nothing, hedges, filler words, em dashes everywhere. Sometimes it's AI slop.
+Often it's just too long.
+
+## What it does
+
+- 16 deterministic rules catch padding and AI tics, and fix the safe ones.
+- A small local model tightens what's left.
+- Every rewrite is verified before it's kept. If it drops a number, a link or a code block, or doesn't reduce the
+  findings, the original stays.
+- Nothing leaves your machine.
+- It also runs as an MCP server (`sloperator mcp`), so an agent can tighten its own writing before you read it. See
+  [MCP server](#mcp-server).
+
+It ships as one crate: a library and a binary, both named `sloperator`.
+
+## Example
+
+This is `sloperator check --fix` with the default model (qwen3-4b). Model output can vary by seed.
+
+Before:
+
+```text
+🚀 In today's fast-paced digital landscape, it's important to note that AI-generated content has become more than just a convenience — it's a fundamental paradigm shift in how we communicate. ✨ That's why I'm absolutely thrilled to unveil sloperator, a game-changing, cutting-edge tool that seamlessly delves into the rich tapestry of your prose. 💡 Moreover, it's not just a linter, but a comprehensive, holistic solution that empowers writers to unlock the full potential of their words. 🔥 Furthermore, by leveraging a local model alongside 16 robust rules, sloperator ensures your text is clear, concise, and compelling — all without ever sending a single word to the cloud. 🌟 In conclusion, whether you're a developer, a marketer, or a storyteller, sloperator is the ultimate partner on your transformative writing journey. Let's dive in! 👇
+```
+
+After:
+
+```text
+AI-generated content is more than a convenience; it's a fundamental shift in communication. I'm thrilled to introduce sloperator, a game-changing tool that analyzes your prose. It's not just a linter but a comprehensive solution that helps writers maximize their words. Using a local model with 16 robust rules, sloperator ensures your text is clear, concise, and compelling without sending any words to the cloud. Whether you're a developer, marketer, or storyteller, sloperator is your key partner in writing. Let's begin.
+```
+
+129 words down to 82: same message, a third shorter. One finding remains (`not just a linter but`), and sloperator
+reports it rather than hiding it.
 
 ## Usage
 
