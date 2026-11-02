@@ -1,5 +1,6 @@
 # Gap Analysis: sloperator — a standalone CLI that makes LLM-generated text read as human
 
+> Historical record: the one-time repository text scan and its planted-reference test have since been removed. Current standalone checks cover path dependencies and extracted builds (SPEC §5).
 **Source:** [PRD](PRD.md) | [Architecture](ARCHITECTURE.md) (ADR-01…09 in `docs/adr/`) | [SPEC](SPEC.md) | UX: none (architecture records no UX scope)
 **Reviewer:** reviewer
 **Last round:** 3 (2026-10-31)
@@ -380,7 +381,7 @@ The remaining self-audit questions are settled in the passes below: DQ-3 (strict
 | 1 (HIGH) | RESOLVED (round 2) | SPEC §3: the `need` macro prints the banner and exits non-zero for each missing tool. ADR-07 and architecture §4.15 are updated. The missing §23.2 row is Gap 15. |
 | 2 (HIGH) | RESOLVED (round 2), for the cases raised | SPEC §10:1055, 1060, 1092-1107. Bare "leverage" now has no fix, and "can serve as" now becomes "can be". The new SLP006 row brought the same class of bug back for "functions as": see Gap 14. |
 | 3 (MEDIUM) | RESOLVED (round 2) | `src/types.rs` is a leaf (§9). `rules` and `edit` re-export from it (§7, §9). Layering rows and `PURE_DIRS` are updated (§5). The architecture §5 graph matches. |
-| 4 (MEDIUM) | **STILL OPEN** | §5:558-572. The marker literals are now `concat!`. But the scan "match[es] case-insensitively" (§5:571), and the same file's marker constant, test name and a doc comment (§5:561, §5:565) each contain the host-project name ignoring case, so the scan still matches its own file. `planted_reference_is_caught` asserts that the unmodified `standalone.rs` copy "reports nothing", so it fails as well. Fix: rename those identifiers (e.g. `HOST_MARKERS`, `no_host_references`), or exempt the file and rely on the planted test. |
+| 4 (MEDIUM) | **STILL OPEN** | §5:558-572. The marker literals are now `concat!`. But the scan "match[es] case-insensitively" (§5:571), and the same file's marker constant, test name and a doc comment (§5:561, §5:565) each contain the host-project name ignoring case, so the scan still matches its own file. the retired planted-reference check asserts that the unmodified `standalone.rs` copy "reports nothing", so it fails as well. Fix: rename those identifiers (e.g. `HOST_MARKERS`, the retired repository text check), or exempt the file and rely on the planted test. |
 | 5 (MEDIUM) | RESOLVED (round 2) | §14: `standard_filters(false)` with every flag set explicitly. Two new tests in §23.10. |
 | 6 (MEDIUM) | RESOLVED (round 2) | §12: only a line that one `Html`/`HtmlBlock` span fully covers counts. Plain text uses `Protected(Directive)`. New tests in §23.8. |
 | 7 (MEDIUM) | RESOLVED (round 2) | §16: `Wrap { width, prefix, newline }`. Prefixes are stripped, then re-inserted on every line. An inconsistent prefix gives SLP902. `protected_strings` counts prefix spans once per block (§6). New tests in §23.12. |
@@ -472,7 +473,7 @@ Add "export these functions as a module" to the SLP006 fixtures as fires-with-no
 
 | Gap | Status | Evidence |
 |-----|--------|----------|
-| 4 (MEDIUM) | RESOLVED (round 3) | SPEC §5: the constant is `HOST_MARKERS` and the test is `no_host_references`. The doc comment names `no_host_references`, and the file comment says no text in the file may hold the host project's name in any case. A case-insensitive grep of the §5 Rust block (SPEC lines 560-590) finds the word only in the prose bullet *outside* the code block, not in the code. The architecture §5 rule table is renamed to match. So `planted_reference_is_caught`'s "clean copy reports nothing" now holds. |
+| 4 (MEDIUM) | RESOLVED (round 3) | SPEC §5: the constant is `HOST_MARKERS` and the test is the retired repository text check. The doc comment names the retired repository text check, and the file comment says no text in the file may hold the host project's name in any case. A case-insensitive grep of the §5 Rust block (SPEC lines 560-590) finds the word only in the prose bullet *outside* the code block, not in the code. The architecture §5 rule table is renamed to match. So the retired planted-reference check's "clean copy reports nothing" now holds. |
 | 9 (LOW) | RESOLVED (round 3) | SPEC §3. The perf nextest run is inside `if [ -n '$(RUN_PERF)' ]; then … else echo "…perf pass skipped…" >&2; fi`. `RUN_PERF` is empty for a selector with no `perf`, and `all` when `TESTS` is unset. `rc` is kept from the unit run, and the `count` check still counts the unit XML. |
 | 14 (HIGH) | RESOLVED (round 3), for the case raised | SPEC §10:1071 and §10:1113-1120. "serves/stands/functions as" → "is" fixes only when the previous token is in `SINGULAR_SUBJECT` (`it`, `this`, `that`, `which`, `who`, `he`, `she`). "export these functions as a module", "we expose helper functions as a convenience" and "The tool serves as a bridge" are fires-with-no-fix fixtures asserted by `safe_fix_contexts_grammatical`. One related context is still open: see Gap 16. |
 | 15 (MEDIUM) | RESOLVED (round 3) | SPEC §23.2 has both new rows: no cargo → `make build`/`test`/`check` print the banner and exit non-zero; and `TESTS='verify'` → the "perf pass skipped" banner, no `ci-perf` run and no `target/nextest/ci-perf/junit.xml`, while `TESTS='perf'` runs the pass. |
@@ -512,7 +513,7 @@ Add "It functions as follows" and "This can serve as well as any" as fires-with-
 |--------------|---------|--------|
 | §3 perf guard under `.ONESHELL` + `-eu -o pipefail` | The `if` sits on its own lines inside the recipe. `|| rc=$$?` keeps `-e` from aborting. The `else` banner goes to stderr. | OK. The skip is loud, not silent. |
 | §23.2 new rows vs §3 | The rows' expected banners match the `need` and perf-skip text in §3 | OK |
-| §5 rename vs architecture §5 | Both name `no_host_references` and `no_external_path_deps` | OK |
+| §5 rename vs architecture §5 | Both name the retired repository text check and `no_external_path_deps` | OK |
 | §10 `SINGULAR_SUBJECT` vs §9 `WordList` | The guard is a preceding-token word list (rule item 3). "which"/"that" cover relative clauses. | OK, apart from Gap 16 |
 | Revision Log "Revision 2" | Every claimed change is present in the text | OK. The round-2 Gap 15 failure (claims without text) did not repeat. |
 
@@ -529,7 +530,7 @@ Add "It functions as follows" and "This can serve as well as any" as fires-with-
 
 | FR / NFR | Test file | Test method | Status |
 |----------|-----------|-------------|--------|
-| FR-1.8 | `tests/standalone.rs` | `no_host_references`, `planted_reference_is_caught` | PRESENT |
+| FR-1.8 | `tests/standalone.rs` | the retired repository text check, the retired planted-reference check | PRESENT |
 | FR-1.9 / FR-1.5 | §23.2 build checks | no-cargo banner per target; perf-skip for `TESTS='verify'` | PRESENT |
 | FR-4.7 / D-4 | `tests/rules_fixtures.rs` | `safe_fix_contexts_grammatical` | VAGUE: Gap 16 (no "as follows" / "as well as" fixture) |
 

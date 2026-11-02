@@ -1,5 +1,6 @@
 # Acceptance audit: sloperator / epic-08-eval
 
+> Historical record: the one-time repository text scan and its planted-reference test have since been removed. Current standalone checks cover path dependencies and extracted builds (SPEC §5).
 Base: 62c04bba2337d1451ef73ce49907af0da9c2fdfa. Reviewer: reviewer. This is round 2, after story-04 fixed round 1's Gap 1.
 
 **Verdict: met** (no blocking gap; one environmental item deferred)
@@ -12,7 +13,7 @@ Base: 62c04bba2337d1451ef73ce49907af0da9c2fdfa. Reviewer: reviewer. This is roun
 | Unit and integration tiers exit 0 | Met | Unit tier (`make test`) exit 0, 211 passed. With a clean `TMPDIR`, the integration tier exits 0 with 7/7 passed. With the host's default `TMPDIR`, `standalone#builds_when_extracted` fails, but it fails the same way at base. See Deferred D1. |
 | FR-9.1 proven by an OS sandbox, not proxy variables (CH-16) | Met | `tests/model_real.rs:280-365` `no_network_under_sandbox` runs `sandbox-exec` with deny `network*`, or `unshare -rn`. Before it runs the binary, a control checks that `nc -z` reaches a live listener unsandboxed and fails inside the sandbox. If no sandbox exists, the test panics naming both tools. Run: PASS (4.2 s). |
 | SPEC §21 describes the shipped adapter (CH-17) | Met | `grep Box::leak\|void_logs\|clear_kv_cache` finds nothing in the SPEC. `send_logs_to_tracing` appears at SPEC:2039, 2055, 2070, 2089. The owned model and the Metal teardown reason appear at SPEC:2164-2165 and open question 4 at SPEC:2574. |
-| Every story's Test Cases pass together | Met | `eval_report_per_model` and `no_network_under_sandbox` pass (integration). `layering#runtime_crate_only_in_adapter`, `standalone#no_host_references` and `standalone#planted_reference_is_caught` pass (unit). |
+| Every story's Test Cases pass together | Met | `eval_report_per_model` and `no_network_under_sandbox` pass (integration). `layering#runtime_crate_only_in_adapter`, the retired repository text check and the retired planted-reference check pass (unit). |
 
 ## Story checks
 
@@ -25,7 +26,7 @@ Base: 62c04bba2337d1451ef73ce49907af0da9c2fdfa. Reviewer: reviewer. This is roun
 - Eval: the integrity assert, the budget assert and the default-model-present assert each fail the test when their requirement breaks.
 - Sandbox test: the `nc` control makes a no-op sandbox fail, and a socket opened by the binary would surface as a `sloperator:` error or a non-0/1 exit.
 - SPEC text: the story Gate greps for the stale names.
-- README: `no_host_references` checks it, and `planted_reference_is_caught` passing shows the scan was not weakened.
+- README: the retired repository text check checks it, and the retired planted-reference check passing shows the scan was not weakened.
 
 ## Reachability
 

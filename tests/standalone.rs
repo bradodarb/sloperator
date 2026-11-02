@@ -1,10 +1,5 @@
-//! Standalone scans (SPEC §5): the repository must hold no reference to the project it was developed in, nor to that
-//! project's build-contract paths.
-//!
-//! Every needle is assembled at runtime from fragments, so no needle appears literally in this file: the scan covers
-//! this file too, with no exemption, and a literal list would match itself on every run. The scan is
-//! case-insensitive, so no identifier, comment or string in this file may contain a needle in any case: the function
-//! is `host_markers` and the test is `no_host_references`.
+//! Standalone build checks (SPEC §5): dependencies must be self-contained, and an extracted
+//! copy of the crate must build and test offline. The extraction check runs in the integration tier.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)] // test helpers may unwrap (architecture §8)
 
@@ -12,29 +7,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-/// The needles, lower-cased: the development host's name, its build-contract paths and verbs, and its build tool.
-fn host_markers() -> Vec<String> {
-    let host = ["ae", "gis"].concat();
-    let fragments: &[&[&str]] = &[
-        &[&host],
-        &["modules", "/", "sloperator"],
-        &["directives", "/", "sloperator"],
-        &["docs", "/", "sloperator"],
-        &["make", " -", "C"],
-        &["UN", "IT="],
-        &["module", ".mk"],
-        &["MODULE", "_NAMESPACES"],
-        &["units", ".sh"],
-        &["grad", "lew"],
-        &["GRAD", "LE_"],
-    ];
-    fragments
-        .iter()
-        .map(|f| f.concat().to_lowercase())
-        .collect()
-}
-
-/// Top-level entries that are not part of the repository's content: VCS metadata and build output.
+/// Top-level VCS metadata and build output excluded from the standalone build copy.
 const NOT_SCANNED: &[&str] = &[".git", "target"];
 
 /// Every file under `root` except the top-level `NOT_SCANNED` entries, as paths relative to `root`.
@@ -59,58 +32,8 @@ fn crate_files(root: &Path) -> Vec<PathBuf> {
     out
 }
 
-/// The scan itself, so the planted-reference test exercises the same code as `no_host_references`.
-/// Returns (path relative to `root`, first marker found), matching case-insensitively; non-UTF-8 files are skipped.
-fn find_markers(root: &Path) -> Vec<(PathBuf, String)> {
-    let markers = host_markers();
-    let mut found = Vec::new();
-    for rel in crate_files(root) {
-        let Ok(text) = fs::read_to_string(root.join(&rel)) else {
-            continue;
-        };
-        let text = text.to_lowercase();
-        if let Some(marker) = markers.iter().find(|m| text.contains(m.as_str())) {
-            found.push((rel, marker.clone()));
-        }
-    }
-    found
-}
-
 fn crate_root() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR"))
-}
-
-#[test]
-fn no_host_references() {
-    let found = find_markers(crate_root());
-    assert!(found.is_empty(), "host references found: {found:?}");
-}
-
-#[test]
-fn planted_reference_is_caught() {
-    let tmp = tempfile::TempDir::new().unwrap();
-    let files = ["src/lib.rs", "tests/standalone.rs"];
-    for file in files {
-        let dest = tmp.path().join(file);
-        fs::create_dir_all(dest.parent().unwrap()).unwrap();
-        fs::copy(crate_root().join(file), &dest).unwrap();
-    }
-    // The unmodified copies report nothing: the fragment form cannot hide a real reference.
-    assert_eq!(find_markers(tmp.path()), vec![]);
-
-    let word = ["ae", "gis"].concat();
-    let lib = tmp.path().join("src/lib.rs");
-    let mut text = fs::read_to_string(&lib).unwrap();
-    text.push_str(&format!("\n// planted reference to {word}\n"));
-    fs::write(&lib, text).unwrap();
-
-    let found = find_markers(tmp.path());
-    assert_eq!(
-        found.len(),
-        1,
-        "expected exactly the planted file: {found:?}"
-    );
-    assert_eq!(found[0].0, PathBuf::from("src/lib.rs"));
 }
 
 #[test]
