@@ -1,0 +1,221 @@
+name: Release
+
+# A tag push `vX.Y.Z` builds every target, publishes a GitHub Release and pushes the rendered Homebrew formula to main.
+# A pull request that touches the release inputs runs the same build, package and formula render, and publishes nothing.
+on:
+  push:
+    tags: ["v*.*.*"]
+  pull_request:
+    paths:
+      - .github/workflows/release.yml
+      - Cargo.toml
+      - Cargo.lock
+      - packaging/**
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: build ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            runner: macos-15
+            features: metal
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-24.04
+            features: ""
+            deb_arch: amd64
+          - target: aarch64-unknown-linux-gnu
+            runner: ubuntu-24.04-arm
+            features: ""
+            deb_arch: arm64
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read the version
+        id: version
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match Cargo.toml version $version"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      # rustup reads rust-toolchain.toml (channel, rustfmt, clippy) and installs it on first use.
+      - name: Install toolchain from rust-toolchain.toml
+        run: |
+          channel=$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)
+          rustup toolchain install "$channel" --profile minimal --target ${{ matrix.target }}
+          rustc --version
+          cargo --version
+
+      - name: Install cmake (macOS)
+        if: runner.os == 'macOS'
+        run: command -v cmake || brew install cmake
+
+      # llama-cpp-2 needs cmake and a C++ compiler, and libclang for bindgen.
+      - name: Install cmake and clang (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake clang libclang-dev
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build
+        run: |
+          features="${{ matrix.features }}"
+          cargo build --release --locked --target ${{ matrix.target }} ${features:+--features "$features"}
+          target/${{ matrix.target }}/release/sloperator --version
+
+      # A release binary must run without Homebrew libraries (libomp, for example) on the user's machine.
+      - name: Check linkage (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          otool -L target/${{ matrix.target }}/release/sloperator
+          if otool -L target/${{ matrix.target }}/release/sloperator | tail -n +2 | grep -vE '^[[:space:]]+(/usr/lib/|/System/)'; then
+            echo "::error::the binary links a library outside /usr/lib and /System"
+            exit 1
+          fi
+
+      - name: Show linkage (Linux)
+        if: runner.os == 'Linux'
+        run: ldd target/${{ matrix.target }}/release/sloperator
+
+      - name: Package
+        run: |
+          packaging/package.sh "${{ steps.version.outputs.version }}" ${{ matrix.target }} \
+            target/${{ matrix.target }}/release/sloperator dist
+          tar -tzvf dist/*.tar.gz
+
+      - name: Install cargo-deb
+        if: matrix.deb_arch != ''
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deb@3.8.0
+
+      - name: Package .deb
+        if: matrix.deb_arch != ''
+        run: |
+          deb="dist/sloperator_${{ steps.version.outputs.version }}_${{ matrix.deb_arch }}.deb"
+          cargo deb --no-build --target ${{ matrix.target }} --output "$deb"
+          packaging/sha256.sh "$deb"
+          dpkg-deb --info "$deb"
+          dpkg-deb --contents "$deb"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: publish GitHub Release
+    if: github.event_name == 'push'
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          path: dist
+          merge-multiple: true
+
+      - name: Release notes from CHANGELOG.md
+        run: packaging/changelog-section.sh "${{ needs.build.outputs.version }}" > release-notes.md
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: v${{ needs.build.outputs.version }}
+          body_path: release-notes.md
+          files: dist/*
+          fail_on_unmatched_files: true
+
+  formula:
+    name: Homebrew formula
+    # On a pull request the release job is skipped; the formula is still rendered and checked, then not pushed.
+    if: >-
+      always() && needs.build.result == 'success' &&
+      (needs.release.result == 'success' || (github.event_name == 'pull_request' && needs.release.result == 'skipped'))
+    needs: [build, release]
+    runs-on: macos-15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'push' && 'main' || '' }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          path: dist
+          merge-multiple: true
+
+      - name: Render Formula/sloperator.rb
+        run: |
+          mkdir -p Formula
+          packaging/render-formula.sh "${{ needs.build.outputs.version }}" dist > Formula/sloperator.rb
+          cat Formula/sloperator.rb
+          ruby -c Formula/sloperator.rb
+
+      # brew style and brew install load formulae only from a tap, so tap a scratch copy by URL, the way users tap this
+      # repository. Homebrew 7 also refuses a short-name load from an untrusted third-party tap, hence `brew trust`.
+      - name: Tap a scratch copy and run brew style
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+        run: |
+          tap="$RUNNER_TEMP/sloperator"
+          mkdir -p "$tap/Formula"
+          cp Formula/sloperator.rb "$tap/Formula/"
+          git -C "$tap" init -q
+          git -C "$tap" add Formula
+          git -C "$tap" -c user.name=ci -c user.email=ci@localhost commit -q -m formula
+          brew tap sloperator-ci/sloperator "$tap"
+          brew trust sloperator-ci/sloperator || true
+          brew style sloperator-ci/sloperator/sloperator
+
+      # The release assets exist only after a tag push, so only then can the formula install and pass its test.
+      - name: brew install and brew test
+        if: github.event_name == 'push'
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+        run: |
+          brew install sloperator-ci/sloperator/sloperator
+          brew test sloperator-ci/sloperator/sloperator
+          sloperator --version
+
+      - name: Push the formula to main
+        if: github.event_name == 'push'
+        run: |
+          version="${{ needs.build.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add Formula/sloperator.rb
+          if git diff --cached --quiet; then
+            echo "Formula/sloperator.rb is already current for v$version"
+            exit 0
+          fi
+          git commit -m "chore(release): formula for v$version"
+          git push origin HEAD:main
