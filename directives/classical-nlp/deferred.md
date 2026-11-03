@@ -1,0 +1,6 @@
+# Classical NLP — deferred acceptance work
+
+## Round 1 (2026-11-02)
+
+- **Gap 8 — Phase 6 stemmer story:** SPEC §32's in-tree fallback leaves make/makes at “make” but making at “mak”, contradicting §36.10's required inflections_meet test. If the dependency gate selects the fallback, repair that backend and run the same make/makes/making and caches/cached/caching assertions against the backend actually shipped. Do not weaken the asserted equivalence to pass the gate. Requirement: FR-9.1, D-9. Evidence and reasoning: gap-analysis.md, Gap 8.
+- **Gap 9 — Phase 4/5 pipeline cache story:** Add an in-crate behavioral multi-window fix test through the existing fake rewriter seam. Observe context construction/tagging per document detection pass and fail if the same pass computes them twice; distinguish original/base and separately parsed candidate documents, which legitimately have separate analysis contexts. Also retain the no-candidate/no-tagging assertion. SPEC §6's allowed-files scan and §27's isolated detect test do not exercise this path. Requirement: NFR-2, FR-7.3. Evidence: src/pipeline/mod.rs:230-256 and :280-283; gap-analysis.md, Gap 9. Gap 1 separately requires architecture correction and a segmentation-work regression.
