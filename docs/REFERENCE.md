@@ -249,7 +249,10 @@ config values fail with the dotted key. CLI and MCP rule explanations expose the
   Every other form fires with no fix. Tags are computed lazily once per document pass.
 - Pattern and residue rules (`builtin/slp003_*` … `slp015_*`), all on by default in v0.1.0. Each is a `PatternRule`
   over the prose of a block, so a match never crosses code or a link.
-  - SLP003 `not-x-but-y` and SLP004 `not-just-but-also` (negative parallelism), SLP007 `significance-puffery` and
+  - SLP004 `not-just-but-also` is `Safe`: it joins single words as "X and Y" only when both have the same
+    certain content-word tag, Y ends the clause and the pair lies within one sentence. Other matches carry
+    no fix and select a model window. A leading "Not" capitalises X; ambiguous words such as "fast" decline.
+  - SLP003 `not-x-but-y` (negative parallelism), SLP007 `significance-puffery` and
     SLP015 `ai-disclaimer` (chatbot residue) are fix class `Model`: they report and attach no fix.
   - SLP005 `rule-of-three` is `Model`. It counts triads "A, B(,) and C" of items of 1-3 words and reports every one
     only when the count per 1,000 prose words is above its param `max_per_1000_words` (default 4).

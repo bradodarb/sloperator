@@ -144,7 +144,12 @@ rule_fixtures!(
     ),
     model(2, slp002_positive_fires, slp002_negative_silent),
     model(3, slp003_positive_fires, slp003_negative_silent),
-    model(4, slp004_positive_fires, slp004_negative_silent),
+    safe(
+        4,
+        slp004_positive_fires,
+        slp004_negative_silent,
+        slp004_fix_matches
+    ),
     model(5, slp005_positive_fires, slp005_negative_silent),
     safe(
         6,
@@ -234,6 +239,51 @@ fn one_finding(code: u16, src: &str) -> (Document, Finding) {
     let mut found = findings(code, &d);
     assert_eq!(found.len(), 1, "{found:?}");
     (d, found.remove(0))
+}
+
+#[test]
+fn slp004_declines_when_y_continues() {
+    let (_, f) = one_finding(4, "It is not only cheap but also quick tools.\n");
+    assert!(f.fix.is_none());
+}
+
+#[test]
+fn slp004_declines_across_sentences() {
+    let src = "It is not only cheap. But also quick.\n";
+    assert!(findings(4, &parse(src)).iter().all(|f| f.fix.is_none()));
+    assert_eq!(apply_fixes(4, src), src);
+}
+
+#[test]
+fn slp004_capitalises_leading_not() {
+    assert_eq!(
+        apply_fixes(4, "Not just cheap but also quick.\n"),
+        "Cheap and quick.\n"
+    );
+}
+
+#[test]
+fn slp004_ambiguous_pair_selects_model_window() {
+    let (d, f) = one_finding(4, "The tool is not just fast, but also simple.\n");
+    assert!(f.fix.is_none());
+    let prose = Prose::new(&d);
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("no-config-here/doc.md");
+    let settings = sloperator::config::Resolver::new(sloperator::config::CliOverrides::default(), None)
+        .unwrap()
+        .for_file(&path)
+        .unwrap();
+    let plans = sloperator::engine::window::windows(
+        &d,
+        &prose,
+        &[f],
+        &[],
+        &settings,
+    );
+    assert_eq!(plans.len(), 1);
+    assert!(matches!(
+        plans[0],
+        sloperator::engine::window::WindowPlan::Rewrite(_)
+    ));
 }
 
 #[test]
