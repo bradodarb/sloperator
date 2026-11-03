@@ -170,15 +170,35 @@ MCP `explain_rule` includes `min` and `max`, with `null` for an unbounded maximu
 `edit`; a fix is a `types::Proposal`. The built-in list is `rules::builtin::all()`; each rule story adds one file
 `src/rules/builtin/slpNNN_<name>.rs` and one line there.
 
-- `rules::detect(doc, &Suppressions, &[Enabled])` runs every enabled rule, drops each finding whose range overlaps a
+- `rules::detect(doc, &Prose, &Suppressions, &[Enabled])` runs every enabled rule, drops each finding whose range overlaps a
   protected span (FR-4.4) or whose start line is suppressed, and sorts by start byte then code. A system code
   (SLP900 and above) is never suppressed.
 - `Registry::builtin()` is built once. `get(code)` and `default_set()` query it. System codes SLP901 and SLP902 are
   not rules and are never in it.
-- The v0.1.0 catalogue is 17 rules (SLP001-SLP017) across all nine families, all on by default with
-  `since = "0.1.0"`. `tests/rules_registry.rs` pins this: `default_set_is_explicit` compares `default_set()` with a
+- The catalogue has 21 rules across ten populated families. The original SLP001–SLP017 remain on by default
+  with `since = "0.1.0"`; SLP018–SLP021 are opt-in Readability rules with `since = "0.2.0"`. `tests/rules_registry.rs` pins this: `default_set_is_explicit` compares `default_set()` with a
   literal list, so changing the defaults shows up as a test diff, and `new_rules_start_off` fails when a rule whose
   `since` is newer than 0.1.0 is `default_on` (FR-4.5).
+
+The four Readability rules are suggestions with fix class `None`, default-off and detection-only: they never
+select a model window. Each reports once on the first paragraph's prose and adds suggestion weight 1 when
+reported. Enable them with `extend_select = ["SLP018", "SLP019", "SLP020", "SLP021"]`; use
+`min_severity = "suggestion"` to include them in the report and score. Thresholds remain provisional.
+
+| Code | Name | Fires when | Threshold (default; inclusive bounds) |
+|------|------|------------|---------------------------------------|
+| SLP018 | `grade-level` | Flesch–Kincaid grade exceeds maximum | `max_grade = 12`; 0–30 |
+| SLP019 | `sentence-length-variation` | population CV falls below minimum | `min_cv = 0.35`; 0–5 |
+| SLP020 | `long-sentences` | mean words per sentence exceeds maximum | `max_avg_words = 25`; 1–1000 |
+| SLP021 | `lexical-diversity` | distinct lowercase words / words falls below minimum | `min_ttr = 0.4`; 0–1 |
+
+All four declare `min_sentences` (default 5) and `min_words` (default 100), static minimum 1 and no finite upper
+bound. Unset minimums inherit the file's `[metrics]` report floors after configuration layers merge.
+An explicit rule minimum may raise a floor but cannot be below it; violations name the rule parameter and floor.
+SLP019 measures sentence-length variation, not perplexity-based burstiness. See [Text metrics](#text-metrics)
+for formulas, counting scope and limits. Every numeric `ParamSpec` has inclusive `min`/`max` bounds; invalid
+config values fail with the dotted key. CLI and MCP rule explanations expose these bounds.
+
 - `tests/rules_fixtures.rs` checks every rule's fixtures (SPEC §10, FR-4.6): `every_rule_has_fixtures` (directory,
   `positive.md`, `negative.md`, and `fixed.md` exactly when the rule is safe), `only_safe_rules_attach_fixes`
   (FR-4.7, over every fixture), and `fix_is_idempotent_over_all_fixtures` (FR-8.9: each safe rule's fixes, applied

@@ -1008,8 +1008,9 @@ pub struct PatternRule { pub set: regex::RegexSet, pub regexes: Vec<regex::Regex
 **Component:** §4.6 rules (ADR-06); architecture §6 fixtures
 **Implements:** FR-4.2, FR-4.3, FR-4.6, FR-4.7, D-4
 
-The catalogue has 17 rules across all nine families (FR-4.2). Every rule is in the default set for v0.1.0, and
-`since = "0.1.0"`.
+The catalogue has 21 rules across ten populated families (FR-4.2). SLP001–SLP017 remain in the default set,
+with `since = "0.1.0"`. SLP018–SLP021 are default-off Readability suggestions, `since = "0.2.0"`.
+Their thresholds are provisional; all are detection-only and select no model window.
 
 | Code | Name | Family | Severity | Fix | Detects | Safe fix |
 |------|------|--------|----------|-----|---------|----------|
@@ -1030,8 +1031,19 @@ The catalogue has 17 rules across all nine families (FR-4.2). Every rule is in t
 | SLP015 | `ai-disclaimer` | ChatbotResidue | error | model | "As of my last (knowledge) update", "As an AI language model" | — |
 | SLP016 | `summary-signpost` | SignificancePuffery | suggestion | safe | "In conclusion,", "In summary,", "Overall,", or "Ultimately," at the start of a block's last sentence | delete it and capitalise |
 | SLP017 | `decorative-emoji` | Markup | warning | safe | pictographic emoji in prose, one finding per grapheme cluster (ZWJ sequence, skin tone, flag, keycap): supplementary-plane `Extended_Pictographic`, BMP `Emoji_Presentation` (✅, ⏳), other BMP pictographs (©, ®, ™) only with U+FE0F, digits/`#`/`*` only as keycaps | delete the emoji (a space-separated cluster at once) and one adjacent space: the one after, or the one before at a line end or before closing punctuation; no fix when it is the only prose on its line (bare list item, heading) or sits between letters or after opening markup |
+| SLP018 | `grade-level` | Readability | suggestion | none | paragraph Flesch–Kincaid grade > `max_grade` (default 12; bounds 0–30) | — |
+| SLP019 | `sentence-length-variation` | Readability | suggestion | none | population sentence-length CV < `min_cv` (default 0.35; bounds 0–5); not perplexity-based burstiness | — |
+| SLP020 | `long-sentences` | Readability | suggestion | none | average paragraph sentence words > `max_avg_words` (default 25; bounds 1–1000) | — |
+| SLP021 | `lexical-diversity` | Readability | suggestion | none | lowercase type/token ratio < `min_ttr` (default 0.4; bounds 0–1) | — |
 
-**Fixture contract (FR-4.6).** `tests/rules_fixtures.rs` uses a macro, `rule_fixtures!(1, 2, …, 17)`. For each
+All four metric rules declare `min_sentences` (default 5) and `min_words` (default 100), each with static minimum
+1 and maximum `f64::MAX`. After config layers merge, unset minimums inherit `Settings.metrics`; explicit values
+below the report floors are `Error::Config` naming the rule parameter and floor. Comparisons use rounded metrics
+over paragraph prose only. Each rule reports once at the first paragraph's prose and contributes weight 1 when
+suggestions are reported; none attaches a fix. Every `ParamSpec` has inclusive `min`/`max` bounds validated by
+config and exposed by CLI/MCP explanations.
+
+**Fixture contract (FR-4.6).** `tests/rules_fixtures.rs` uses a macro, `rule_fixtures!` with entries for SLP001–SLP021. For each
 code it generates `slpNNN_positive_fires`, `slpNNN_negative_silent` and, for safe rules only,
 `slpNNN_fix_matches`. A further test, `every_rule_has_fixtures`, walks `Registry::builtin()` and fails if any of
 these holds:

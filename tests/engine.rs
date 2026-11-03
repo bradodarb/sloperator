@@ -660,3 +660,33 @@ fn seed_passed_through_same_for_every_window() {
     let seeds: Vec<u32> = factory.calls.borrow().iter().map(|(_, s)| *s).collect();
     assert_eq!(seeds, vec![1234; 3]);
 }
+
+#[test]
+fn metric_finding_never_selects_window() {
+    let d = parse(&std::fs::read_to_string(common::fixture("rules/SLP018/positive.md")).unwrap());
+    let prose = Prose::new(&d);
+    let mut s = settings();
+    s.min_severity = Severity::Suggestion;
+    let rule = sloperator::rules::registry::Registry::builtin()
+        .get(RuleCode(18))
+        .unwrap();
+    let enabled = sloperator::rules::Enabled {
+        rule,
+        severity: Severity::Suggestion,
+        params: rule
+            .meta()
+            .params
+            .iter()
+            .map(|p| (p.name, p.default))
+            .collect(),
+    };
+    let findings = sloperator::rules::detect(
+        &d,
+        &prose,
+        &sloperator::directives::Suppressions::default(),
+        &[enabled],
+    );
+    assert_eq!(findings.len(), 1);
+    assert_eq!(findings[0].code, RuleCode(18));
+    assert!(windows(&d, &prose, &findings, &[], &s).is_empty());
+}
