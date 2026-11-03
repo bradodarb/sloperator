@@ -13,3 +13,4 @@ the test reads only the baseline row.
 | phase | residual per 1,000 prose words | date |
 |-------|-------------------------------|------|
 | baseline | 19.56 | 2026-11-02 |
+| phase 2 | 19.56 | 2026-11-02 |

@@ -53,7 +53,10 @@ fn residual_per_1000() -> f64 {
             .iter()
             .filter(|l| !l.finding.code.is_system())
             .filter(|l| {
-                match Registry::builtin().get(l.finding.code).map(|x| x.meta().fix) {
+                match Registry::builtin()
+                    .get(l.finding.code)
+                    .map(|x| x.meta().fix)
+                {
                     Some(FixClass::Model) => true,
                     Some(FixClass::Safe) => l.finding.fix.is_none(),
                     Some(FixClass::None) | None => false,

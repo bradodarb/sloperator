@@ -14,8 +14,8 @@ Often it's just too long.
 
 ## What it does
 
-- 21 deterministic rules catch padding, AI tics and reading patterns, and fix the safe ones.
-  The four reading-metric rules are opt-in.
+- 22 deterministic rules catch padding, AI tics and reading patterns, and fix the safe ones.
+  The four reading-metric rules and weak-intensifier rule are opt-in.
 - A small local model tightens what's left.
 - Every rewrite is verified before it's kept. If it drops a number, a link or a code block, or doesn't reduce the
   findings, the original stays.

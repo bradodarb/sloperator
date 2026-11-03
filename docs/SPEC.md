@@ -1008,13 +1008,14 @@ pub struct PatternRule { pub set: regex::RegexSet, pub regexes: Vec<regex::Regex
 **Component:** §4.6 rules (ADR-06); architecture §6 fixtures
 **Implements:** FR-4.2, FR-4.3, FR-4.6, FR-4.7, D-4
 
-The catalogue has 21 rules across ten populated families (FR-4.2). SLP001–SLP017 remain in the default set,
+The catalogue has 22 rules across eleven populated families (FR-4.2). SLP001–SLP017 remain in the default set,
 with `since = "0.1.0"`. SLP018–SLP021 are default-off Readability suggestions, `since = "0.2.0"`.
 Their thresholds are provisional; all are detection-only and select no model window.
+SLP022 is a default-off Wordiness suggestion with no params or fix, also since 0.2.0.
 
 | Code | Name | Family | Severity | Fix | Detects | Safe fix |
 |------|------|--------|----------|-----|---------|----------|
-| SLP001 | `ai-vocabulary-replaceable` | AiVocabulary | warning | safe | "delve(s/d) into" / "delving into", "utilize(s/d)" / "utilizing", "in order to", "facilitate(s/d)" / "facilitating"; "leverages", "leveraged", "leveraging" (verb-only inflections). Bare "leverage" is reported with **no fix** (noun/verb ambiguous, Gap 2) | inflection-matched: "look(s/ed) at" / "looking at", "use(s/d)" / "using", "to", "help(s/ed)" / "helping", "uses" / "used" / "using" (case kept) |
+| SLP001 | `ai-vocabulary-replaceable` | AiVocabulary | warning | safe | "delve(s/d) into" / "delving into", "utilize(s/d)" / "utilizing", "in order to", "facilitate(s/d)" / "facilitating"; "leverages", "leveraged", "leveraging" (verb-only inflections). Bare "leverage" is reported with **no fix** (noun/verb ambiguous, Gap 2). Also inflected nominalisations (“make a decision”, “reach a conclusion”, “take into consideration/account”, “give consideration to”, “conduct/perform an analysis of”, “conduct an investigation into”, “provide assistance to”, “make an attempt to”, “have a tendency to”, “be in agreement with”) and padded phrases (“due to the fact that”, “at this point in time”, “on a daily basis”, “prior to”, etc.) in proven grammatical contexts; remains default-on | original inflection-matched replacements (case kept); nominalisations → “decide”, “conclude”, “consider”, “analyze”, “investigate”, “help”, “try to”, “tend to”, “agree with”; padded phrases → “because”, “although”, “now”, “soon”, “daily”, “regularly”, “until”, “before”, “for”, “except”, “near” |
 | SLP002 | `ai-vocabulary` | AiVocabulary | suggestion | model | "tapestry", "testament", "multifaceted", "pivotal", "realm", "seamless", "robust" | — |
 | SLP003 | `not-x-but-y` | NegativeParallelism | warning | model | "it's not X, it's Y"; "this isn't X — it's Y", in one sentence or two adjacent sentences | — |
 | SLP004 | `not-just-but-also` | NegativeParallelism | warning | model | "not just X, but (also) Y"; "not only X but also Y" | — |
@@ -1035,6 +1036,13 @@ Their thresholds are provisional; all are detection-only and select no model win
 | SLP019 | `sentence-length-variation` | Readability | suggestion | none | population sentence-length CV < `min_cv` (default 0.35; bounds 0–5); not perplexity-based burstiness | — |
 | SLP020 | `long-sentences` | Readability | suggestion | none | average paragraph sentence words > `max_avg_words` (default 25; bounds 1–1000) | — |
 | SLP021 | `lexical-diversity` | Readability | suggestion | none | lowercase type/token ratio < `min_ttr` (default 0.4; bounds 0–1) | — |
+| SLP022 | `weak-intensifier` | Wordiness | suggestion | none | absolutely, actually, basically, extremely, highly, incredibly, literally, quite, really, totally, truly, very; no params, default-off | — |
+
+SLP001's wider wordiness scope keeps its default-on status, so default output can gain findings and safe fixes.
+Noun-final rows require a proven closed sentence/complement or fronted adverbial context; noun modifiers,
+relative clauses and coordinated/appended complements are refused. “The fact that” rows refuse preceding
+forms of “be”. SLP022 is detection-only because removing intensifiers changes strength, which verification
+does not check; no model window is selected.
 
 All four metric rules declare `min_sentences` (default 5) and `min_words` (default 100), each with static minimum
 1 and maximum `f64::MAX`. After config layers merge, unset minimums inherit `Settings.metrics`; explicit values
@@ -1043,7 +1051,7 @@ over paragraph prose only. Each rule reports once at the first paragraph's prose
 suggestions are reported; none attaches a fix. Every `ParamSpec` has inclusive `min`/`max` bounds validated by
 config and exposed by CLI/MCP explanations.
 
-**Fixture contract (FR-4.6).** `tests/rules_fixtures.rs` uses a macro, `rule_fixtures!` with entries for SLP001–SLP021. For each
+**Fixture contract (FR-4.6).** `tests/rules_fixtures.rs` uses a macro, `rule_fixtures!` with entries for SLP001–SLP022. For each
 code it generates `slpNNN_positive_fires`, `slpNNN_negative_silent` and, for safe rules only,
 `slpNNN_fix_matches`. A further test, `every_rule_has_fixtures`, walks `Registry::builtin()` and fails if any of
 these holds:
