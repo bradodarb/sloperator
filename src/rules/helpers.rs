@@ -1,11 +1,16 @@
 //! Shared detectors (ADR-06). One aho-corasick automaton per word-list rule (NFR-3).
+//! Metric rules read cached paragraph counts with resolved minimums, then anchor on the first paragraph's prose.
+//! Minimum params default to 5/100; config replaces unset values with report floors and rejects lower overrides.
 
 use std::ops::Range;
 
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder, Input, MatchKind};
 use pulldown_cmark::{Event, Options, Parser};
 
-use crate::doc::{BlockText, Document, Format, SpanKind};
+use crate::doc::{BlockKind, BlockText, Document, Format, SpanKind};
+use crate::rules::{ParamSpec, RuleCtx};
+use crate::text::metrics::{DEFAULT_MIN_SENTENCES, DEFAULT_MIN_WORDS};
+use crate::text::{Floors, Metrics};
 
 type Entry = (&'static str, Option<&'static str>);
 
@@ -189,4 +194,39 @@ pub fn first_prose(doc: &Document, range: &Range<usize>) -> Option<Range<usize>>
             let trimmed = text.trim();
             (!trimmed.is_empty()).then(|| r.start + lead..r.start + lead + trimmed.len())
         })
+}
+
+/// Readability rules may raise sample minimums; config resolves the dynamic lower bound from report floors.
+pub const MIN_SENTENCES_PARAM: ParamSpec = ParamSpec {
+    name: "min_sentences",
+    default: DEFAULT_MIN_SENTENCES as f64,
+    min: 1.0,
+    max: f64::MAX,
+    help: "Fewest paragraph sentences before the rule can fire (at least the configured report floor)",
+};
+
+pub const MIN_WORDS_PARAM: ParamSpec = ParamSpec {
+    name: "min_words",
+    default: DEFAULT_MIN_WORDS as f64,
+    min: 1.0,
+    max: f64::MAX,
+    help: "Fewest paragraph words before the rule can fire (at least the configured report floor)",
+};
+
+/// Derive once from the shared counts using this rule's resolved sample minimums.
+pub fn document_metrics(ctx: &RuleCtx<'_>) -> Option<Metrics> {
+    let floors = Floors {
+        sentences: ctx.param(MIN_SENTENCES_PARAM.name).ceil() as u64,
+        words: ctx.param(MIN_WORDS_PARAM.name).ceil() as u64,
+    };
+    let m = ctx.prose.counts(ctx.doc).derive(&floors);
+    m.avg_sentence_length.is_some().then_some(m)
+}
+
+/// A document finding reports on the first prose run of the first paragraph.
+pub fn metric_anchor(doc: &Document) -> Option<Range<usize>> {
+    doc.blocks
+        .iter()
+        .filter(|b| b.kind == BlockKind::Paragraph)
+        .find_map(|b| first_prose(doc, &b.range))
 }

@@ -19,6 +19,7 @@ mod slp014_em_dash_density;
 mod slp015_ai_disclaimer;
 mod slp016_summary_signpost;
 mod slp017_decorative_emoji;
+mod slp018_grade_level;
 
 pub fn all() -> Vec<Box<dyn Rule>> {
     vec![
@@ -39,5 +40,6 @@ pub fn all() -> Vec<Box<dyn Rule>> {
         slp015_ai_disclaimer::rule(),
         slp016_summary_signpost::rule(),
         slp017_decorative_emoji::rule(),
+        slp018_grade_level::rule(),
     ]
 }

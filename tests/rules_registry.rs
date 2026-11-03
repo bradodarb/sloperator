@@ -21,7 +21,7 @@ fn at_least_15_rules_covering_nine_families() {
     let codes: BTreeSet<RuleCode> = reg.all().map(|r| r.meta().code).collect();
     assert_eq!(codes.len(), reg.all().count(), "duplicate rule codes");
     assert!(codes.len() >= 15, "{} rules", codes.len());
-    assert_eq!(codes.len(), 17, "the v0.1.0 catalogue has 17 rules");
+    assert_eq!(codes.len(), 18, "the catalogue includes SLP018");
     let families = [
         Family::AiVocabulary,
         Family::NegativeParallelism,
@@ -65,6 +65,7 @@ fn every_rule_has_code_name_severity_state_fix() {
         (15, (Error, Model)),
         (16, (Suggestion, Safe)),
         (17, (Warning, Safe)),
+        (18, (Suggestion, NoFix)),
     ]
     .into_iter()
     .collect();
@@ -169,5 +170,30 @@ fn param_defaults_within_bounds() {
                 param.max
             );
         }
+    }
+}
+
+#[test]
+fn slp018_metadata_and_families() {
+    let meta = Registry::builtin()
+        .get(RuleCode(18))
+        .expect("SLP018 registered")
+        .meta();
+    assert_eq!(meta.family, Family::Readability);
+    assert_eq!(meta.severity, Severity::Suggestion);
+    assert_eq!(meta.fix, FixClass::None);
+    assert!(!meta.default_on);
+    assert_eq!(meta.since, "0.2.0");
+    assert!(meta.explain.contains("provisional"));
+    assert_eq!(Registry::builtin().version, "0.2.0");
+    for (family, expected) in [
+        (Family::Readability, "readability"),
+        (Family::Wordiness, "wordiness"),
+        (Family::Redundancy, "redundancy"),
+    ] {
+        assert_eq!(
+            serde_json::to_value(family).expect("family serializes"),
+            expected
+        );
     }
 }

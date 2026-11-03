@@ -150,7 +150,7 @@ fn json_shape_matches_schema() {
     let v: serde_json::Value = serde_json::from_str(&out).unwrap();
 
     assert_eq!(v["schemaVersion"], 1);
-    assert_eq!(v["ruleSetVersion"], "0.1.0");
+    assert_eq!(v["ruleSetVersion"], "0.2.0");
     let a = &v["files"][0];
     assert_eq!(a["path"], "docs/a.md");
     assert_eq!(
