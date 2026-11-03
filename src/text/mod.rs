@@ -1,5 +1,8 @@
 //! Classical text analysis (classical-nlp SPEC §4, §9, ADR-01).
 //!
+//! `stem::stem` normalises lower-case inflections with an in-tree suffix stripper (D-9).
+//! It applies one suffix rule and drops a final `e` only when at least three letters remain.
+//!
 //! `lexicon` provides compiled closed word lists and contraction-aware negation/modal helpers (SPEC §22).
 //! SLP006 shares its modal list; `to` remains a separate infinitive guard in the rule.
 //!
@@ -26,6 +29,7 @@ use crate::doc::Document;
 pub mod lexicon;
 pub mod metrics;
 pub mod segment;
+pub mod stem;
 pub mod syllable;
 pub mod tagger;
 

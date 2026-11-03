@@ -2,6 +2,11 @@
 
 ## 0.2.0 (unreleased)
 
+- Added `text::stem::stem` using the in-tree suffix stripper (D-9), with a final-`e` floor of three.
+  The dependency trial with `rust-stemmers = "=1.2.0"` failed the contract `check UNIT=sloperator`:
+  existing formatting errors in SLP004 and calibration stopped it before `cargo deny check` ran, so there
+  is no cargo-deny pass. Chose fallback (b); Cargo.toml and Cargo.lock remain unchanged.
+
 - SLP003 and SLP004 now use Safe-class template fixes in proven contexts. SLP003 deletes short plain denials
   with matching subjects in one sentence; `max_words` defaults to 3 (bounds 1–10). Additive frames stay unfixed.
   SLP004 joins certain single-word pairs as “X and Y”. Other matches may still be rewritten by the model,
