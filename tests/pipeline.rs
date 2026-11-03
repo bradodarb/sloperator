@@ -380,3 +380,35 @@ fn enabling_metric_rule_adds_suggestion_weight() {
     assert_eq!(after.score.weighted, before.score.weighted + 1);
     assert_eq!(after.score.prose_words, before.score.prose_words);
 }
+
+#[test]
+fn rejected_new_check_is_slp901_with_name() {
+    let tmp = tempfile::tempdir().unwrap();
+    let text = "We do not utilize it.";
+    let mut a = pipeline::analyse(source(tmp.path(), text)).unwrap();
+    let fix = a
+        .findings
+        .iter_mut()
+        .find(|f| f.code == RuleCode(1))
+        .unwrap()
+        .fix
+        .as_mut()
+        .unwrap();
+    fix.range = text.find("not").unwrap()..text.find("utilize").unwrap() + "utilize".len();
+    fix.replacement = "use".into();
+    let r = pipeline::fix(a, RULES_ONLY, None, DEFAULT_SEED).unwrap();
+    assert_eq!(r.fixed, None);
+    assert_eq!(&*r.original, text);
+    let rejected: Vec<_> = r
+        .findings
+        .iter()
+        .filter(|l| l.finding.code == RuleCode::REWRITE_REJECTED)
+        .collect();
+    assert_eq!(rejected.len(), 1);
+    assert!(
+        rejected[0]
+            .finding
+            .message
+            .starts_with("rewrite rejected (negation):")
+    );
+}

@@ -73,7 +73,7 @@ fn apply_fixes(code: u16, src: &str) -> String {
     let verified: Vec<Verified<Proposal>> = plan
         .kept
         .into_iter()
-        .map(|p| verify::edit(&d, p, &[], &protect).unwrap())
+        .map(|p| verify::edit(&d, p, &[], &protect, &[]).unwrap())
         .collect();
     edit::apply(src, &verified, d.newline)
 }
@@ -670,4 +670,35 @@ fn slp022_reports_all_twelve_intensifiers_without_fixes() {
         );
         assert!(f.fix.is_none());
     }
+}
+
+#[test]
+fn no_safe_fixture_fix_newly_rejected() {
+    for rule in Registry::builtin()
+        .all()
+        .filter(|r| r.meta().fix == FixClass::Safe)
+    {
+        let code = rule.meta().code.0;
+        for name in ["positive.md", "negative.md", "fixed.md"] {
+            let src = read(code, name);
+            let d = parse(&src);
+            let proposals = findings(code, &d)
+                .into_iter()
+                .filter_map(|f| f.fix)
+                .collect();
+            for proposal in edit::plan(proposals, &[]).kept {
+                verify::edit(&d, proposal, &[], &ProtectSettings::default(), &[])
+                    .unwrap_or_else(|e| panic!("SLP{code:03}/{name}: {e:?}"));
+            }
+        }
+    }
+}
+
+#[test]
+fn slp008_preserves_modal_in_should_preamble() {
+    let d = parse("It should be noted that the cache is cold.");
+    let found = findings(8, &d);
+    assert_eq!(found.len(), 1);
+    assert!(found[0].fix.is_none());
+    assert_eq!(apply_fixes(8, &d.src), d.src.as_ref());
 }

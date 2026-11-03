@@ -11,6 +11,7 @@
 
 use crate::rules::helpers::PatternRule;
 use crate::rules::{Family, Finding, FixClass, Rule, RuleCode, RuleCtx, RuleMeta, Severity};
+use crate::text::lexicon;
 
 /// Every inflection of the three verbs, then "as". The match is the verb, the whitespace and "as".
 const PATTERNS: &[&str] = &[
@@ -24,11 +25,6 @@ const SINGULAR_SUBJECT: &[&str] = &["it", "this", "that", "which", "who", "he", 
 /// The only words after "as" that open a noun phrase, so "is"/"be" plus that phrase is grammatical (Gap 16).
 const AS_COMPLEMENT: &[&str] = &[
     "a", "an", "the", "its", "his", "her", "their", "our", "your", "my", "one", "another",
-];
-
-/// Words after which the base form is a verb: "can serve as", "to serve as".
-const MODALS: &[&str] = &[
-    "can", "could", "may", "might", "must", "shall", "should", "will", "would", "to",
 ];
 
 /// Adverbs allowed between a modal and the base form, besides any word ending in "ly".
@@ -117,10 +113,10 @@ fn safe_replacement(text: &str, at: &std::ops::Range<usize>, form: Form) -> Opti
     let (start, prev) = word_before(text, at.start)?;
     match form {
         Form::ThirdPerson => SINGULAR_SUBJECT.contains(&prev.as_str()).then_some("is"),
-        Form::Base if MODALS.contains(&prev.as_str()) => Some("be"),
+        Form::Base if prev == "to" || lexicon::MODALS.contains(&prev.as_str()) => Some("be"),
         Form::Base if is_adverb(&prev) => {
             let (_, before) = word_before(text, start)?;
-            MODALS.contains(&before.as_str()).then_some("be")
+            (before == "to" || lexicon::MODALS.contains(&before.as_str())).then_some("be")
         }
         Form::Base | Form::Other => None,
     }

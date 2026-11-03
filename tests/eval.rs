@@ -43,7 +43,7 @@ const RULES_ONLY: Engines = Engines {
 };
 
 /// Every `Check`, so the report lists each one, zero included.
-const CHECKS: [Check; 10] = [
+const CHECKS: [Check; 13] = [
     Check::Numbers,
     Check::Urls,
     Check::Terms,
@@ -54,6 +54,9 @@ const CHECKS: [Check; 10] = [
     Check::OutputContract,
     Check::NoImprovement,
     Check::Document,
+    Check::Negation,
+    Check::ProperNouns,
+    Check::Modals,
 ];
 
 /// Seconds spent in `rewrite` and how many windows reached it. Model load time is not counted.

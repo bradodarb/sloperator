@@ -234,8 +234,9 @@ check; the reference detail lives in those two docs):
 - Usage: `check`, `--fix`, `--diff`, input forms, exit codes, output formats, directives, config reference.
 - Score formula (FR-5.1): the formula from §11, with the weights.
 - Limits, stating FR-5.4 word for word: "The score measures style tells, not text quality or provenance.
-  sloperator does not make text undetectable and makes no such claim." Also: verification covers numbers, URLs,
-  configured terms, placeholders and block structure, not names or claim polarity (PRD Risk 1).
+  sloperator does not make text undetectable and makes no such claim." Also: Verification covers numbers, URLs,
+  configured terms, placeholders, block structure, negations, modal verbs and capitalised words as a proxy for names.
+  It does not detect every change of meaning: a reworded claim with the same negations, modals and capitalised words passes (PRD Risk 1).
 - Model setup: `sloperator model pull`, the cache location and the registry table. Weights are never committed or
   embedded (FR-9.10).
 - Building: Phase 0 prerequisites, `cargo build --release --locked`, and `--no-default-features` for a rules-only

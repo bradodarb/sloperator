@@ -131,7 +131,7 @@ pub fn fix(
         let proposals: Vec<_> = findings0.iter().filter_map(|f| f.fix.clone()).collect();
         let frozen = a.sup.frozen_ranges();
         for p in edit::plan(proposals, frozen).kept {
-            match verify::edit(&doc0, p, frozen, &a.source.settings.protect) {
+            match verify::edit(&doc0, p, frozen, &a.source.settings.protect, &[]) {
                 Ok(v) => applied.push(v),
                 Err(r) => rejected.push(r),
             }
@@ -292,7 +292,7 @@ fn accept(
     source: &Source,
 ) -> Result<Result<Verified<edit::Proposal>, Rejection>, Error> {
     let verified = match engine::mask::propose(doc, w, raw, profile)
-        .and_then(|p| verify::edit(doc, p, frozen, &source.settings.protect))
+        .and_then(|p| verify::edit(doc, p, frozen, &source.settings.protect, &w.codes))
     {
         Ok(v) => v,
         Err(r) => return Ok(Err(r)),
@@ -362,6 +362,9 @@ fn check_name(c: Check) -> &'static str {
         Check::OutputContract => "outputContract",
         Check::NoImprovement => "noImprovement",
         Check::Document => "document",
+        Check::Negation => "negation",
+        Check::ProperNouns => "properNouns",
+        Check::Modals => "modals",
     }
 }
 

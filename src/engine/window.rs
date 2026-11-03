@@ -2,7 +2,8 @@
 //!
 //! A window is one prose block, or one sentence of it when `model.window = "sentence"`, that overlaps a finding the
 //! model may fix. A window that cannot be sent safely is a [`WindowPlan::Skip`], which the pipeline reports as SLP902.
-//! Nothing is ever skipped silently.
+//! Nothing is ever skipped silently. Each planned rewrite retains one code per overlapping non-system finding,
+//! including duplicates, in finding order; the same overlap filter computes its original weight.
 
 use std::ops::Range;
 
@@ -26,6 +27,8 @@ pub struct Window {
     pub wrap: Option<Wrap>,
     /// Weighted findings overlapping `range` (FR-9.5), system codes excluded.
     pub weight_before: u32,
+    /// One code per overlapping non-system finding, in finding order; duplicates are retained.
+    pub codes: Vec<RuleCode>,
 }
 
 /// Line structure of a multi-line window (Gap 7). `prefix` is the container continuation text that every line after
@@ -191,11 +194,15 @@ fn plan(
             indent,
         }
     });
-    let weight_before = findings
-        .iter()
-        .filter(|f| !f.code.is_system() && f.range.start < range.end && range.start < f.range.end)
+    let overlapping = || {
+        findings.iter().filter(|f| {
+            !f.code.is_system() && f.range.start < range.end && range.start < f.range.end
+        })
+    };
+    let weight_before = overlapping()
         .map(|f| crate::score::weight(f.severity))
         .sum();
+    let codes = overlapping().map(|f| f.code).collect();
     WindowPlan::Rewrite(Window {
         block,
         range,
@@ -203,6 +210,7 @@ fn plan(
         slots,
         wrap,
         weight_before,
+        codes,
     })
 }
 

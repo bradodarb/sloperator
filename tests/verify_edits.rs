@@ -26,7 +26,7 @@ fn try_edit(
         replacement: replacement.to_owned(),
         origin: ProposalOrigin::Model,
     };
-    verify::edit(&d, p, frozen, protect).map(|_| ())
+    verify::edit(&d, p, frozen, protect, &[]).map(|_| ())
 }
 
 fn failed(r: Result<(), Rejection>) -> Check {
@@ -143,17 +143,17 @@ fn rejects_lost_term() {
 #[test]
 fn rejects_new_heading_marker() {
     let r = try_edit(
-        "Intro text here.\n\nSecond paragraph.\n",
-        "Intro text here.",
-        "Intro text here.\n\n# New heading",
+        "intro text here.\n\nSecond paragraph.\n",
+        "intro text here.",
+        "intro text here.\n\n# new heading",
         &[],
         &plain(),
     );
     assert_eq!(failed(r), Check::NewBlockMarker);
     let r = try_edit(
-        "Intro text here.\n\nSecond paragraph.\n",
-        "Intro text here.",
-        "# Intro text here.",
+        "intro text here.\n\nSecond paragraph.\n",
+        "intro text here.",
+        "# intro text here.",
         &[],
         &plain(),
     );
@@ -163,17 +163,17 @@ fn rejects_new_heading_marker() {
 #[test]
 fn rejects_list_marker() {
     let r = try_edit(
-        "Intro text here.\n\nSecond paragraph.\n",
-        "Intro text here.",
-        "Intro text here.\n\n- one\n- two",
+        "intro text here.\n\nSecond paragraph.\n",
+        "intro text here.",
+        "intro text here.\n\n- one\n- two",
         &[],
         &plain(),
     );
     assert_eq!(failed(r), Check::NewBlockMarker);
     let r = try_edit(
-        "Intro text here.\n\nSecond paragraph.\n",
-        "Intro text here.",
-        "- Intro text here.",
+        "intro text here.\n\nSecond paragraph.\n",
+        "intro text here.",
+        "- intro text here.",
         &[],
         &plain(),
     );
@@ -184,9 +184,9 @@ fn rejects_list_marker() {
 fn rejects_fence() {
     // A fenced block is protected bytes, not a block, so the protected-bytes check catches it.
     let r = try_edit(
-        "Intro text here.\n\nSecond paragraph.\n",
-        "Intro text here.",
-        "Intro text here.\n\n```\ncode\n```",
+        "intro text here.\n\nSecond paragraph.\n",
+        "intro text here.",
+        "intro text here.\n\n```\ncode\n```",
         &[],
         &plain(),
     );
@@ -228,7 +228,7 @@ fn rejects_edit_into_protected_or_frozen() {
         origin: ProposalOrigin::Model,
     };
     assert_eq!(
-        verify::edit(&d, p, &[], &plain()).unwrap_err().failed,
+        verify::edit(&d, p, &[], &plain(), &[]).unwrap_err().failed,
         Check::Protected
     );
 }
@@ -243,7 +243,7 @@ fn accepts_reordered_placeholders_restored() {
         replacement: "See 2024-01-05: 10 cents and 5 dollars.".into(),
         origin: ProposalOrigin::Model,
     };
-    let v = verify::edit(&d, p, &[], &plain()).unwrap();
+    let v = verify::edit(&d, p, &[], &plain(), &[]).unwrap();
     assert_eq!(
         v.get().replacement,
         "See 2024-01-05: 10 cents and 5 dollars."
@@ -280,4 +280,185 @@ fn document_check_fires_on_forged_edit_pair() {
     let code = parse("Run `a` now.\n", &p);
     let e = verify::document(&code, &parse("Run `b` now.\n", &p)).unwrap_err();
     assert_eq!(e.failed, Check::Document);
+}
+
+fn meaning_edit(
+    src: &str,
+    replacement: &str,
+    origin: ProposalOrigin,
+    resolves: &[sloperator::types::RuleCode],
+) -> Result<(), Rejection> {
+    let d = parse(src, &plain());
+    let p = Proposal {
+        range: 0..src.len(),
+        replacement: replacement.into(),
+        origin,
+    };
+    verify::edit(&d, p, &[], &plain(), resolves).map(|_| ())
+}
+
+#[test]
+fn rejects_dropped_negation() {
+    assert_eq!(
+        failed(meaning_edit(
+            "It is not ready.",
+            "It is ready.",
+            ProposalOrigin::Model,
+            &[]
+        )),
+        Check::Negation
+    );
+}
+
+#[test]
+fn accepts_kept_negation() {
+    meaning_edit(
+        "It isn't ready.",
+        "It is not ready.",
+        ProposalOrigin::Model,
+        &[],
+    )
+    .unwrap();
+}
+
+#[test]
+fn slp003_origin_may_drop_one_negation() {
+    use sloperator::types::RuleCode;
+    let origin = ProposalOrigin::Rule(RuleCode(3));
+    meaning_edit("It is not red but blue.", "It is blue.", origin, &[]).unwrap();
+    assert_eq!(
+        failed(meaning_edit(
+            "It is not red and not blue.",
+            "It is green.",
+            origin,
+            &[]
+        )),
+        Check::Negation
+    );
+}
+
+#[test]
+fn model_allowance_counts_window_findings() {
+    use sloperator::types::RuleCode;
+    let text = "It is not red and not blue.";
+    assert_eq!(
+        failed(meaning_edit(
+            text,
+            "It is green.",
+            ProposalOrigin::Model,
+            &[]
+        )),
+        Check::Negation
+    );
+    assert_eq!(
+        failed(meaning_edit(
+            text,
+            "It is green.",
+            ProposalOrigin::Model,
+            &[RuleCode(3)]
+        )),
+        Check::Negation
+    );
+    meaning_edit(
+        text,
+        "It is green.",
+        ProposalOrigin::Model,
+        &[RuleCode(3), RuleCode(3)],
+    )
+    .unwrap();
+    meaning_edit(
+        "It is not red but blue.",
+        "It is blue.",
+        ProposalOrigin::Model,
+        &[RuleCode(3)],
+    )
+    .unwrap();
+    meaning_edit(
+        text,
+        "It is green.",
+        ProposalOrigin::Model,
+        &[RuleCode(3), RuleCode(4)],
+    )
+    .unwrap();
+    assert_eq!(
+        failed(meaning_edit(
+            "It is not ready.",
+            "It is ready.",
+            ProposalOrigin::Model,
+            &[RuleCode(1)]
+        )),
+        Check::Negation
+    );
+}
+
+#[test]
+fn rejects_removed_proper_noun() {
+    assert_eq!(
+        failed(meaning_edit(
+            "We use Redis here.",
+            "We use it here.",
+            ProposalOrigin::Model,
+            &[]
+        )),
+        Check::ProperNouns
+    );
+}
+
+#[test]
+fn accepts_sentence_initial_capital_change() {
+    meaning_edit(
+        "It is worth noting that t",
+        "T",
+        ProposalOrigin::Rule(sloperator::types::RuleCode(8)),
+        &[],
+    )
+    .unwrap();
+}
+
+#[test]
+fn accepts_title_case_hedge_removal() {
+    let d = parse("It May Potentially fail.", &plain());
+    let p = Proposal {
+        range: 3..18,
+        replacement: "May".into(),
+        origin: ProposalOrigin::Rule(sloperator::types::RuleCode(9)),
+    };
+    verify::edit(&d, p, &[], &plain(), &[]).unwrap();
+}
+
+#[test]
+fn rejects_model_removal_of_capitalised_common_word() {
+    assert_eq!(
+        failed(meaning_edit(
+            "We watched It and a robust sequel.",
+            "We watched something and a sequel.",
+            ProposalOrigin::Model,
+            &[]
+        )),
+        Check::ProperNouns
+    );
+}
+
+#[test]
+fn rejects_changed_modal() {
+    assert_eq!(
+        failed(meaning_edit(
+            "It must ship.",
+            "It should ship.",
+            ProposalOrigin::Model,
+            &[]
+        )),
+        Check::Modals
+    );
+}
+
+#[test]
+fn accepts_modal_contraction() {
+    meaning_edit(
+        "It will not ship.",
+        "It won't ship.",
+        ProposalOrigin::Model,
+        &[],
+    )
+    .unwrap();
 }

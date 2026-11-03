@@ -690,3 +690,23 @@ fn metric_finding_never_selects_window() {
     assert_eq!(findings[0].code, RuleCode(18));
     assert!(windows(&d, &prose, &findings, &[], &s).is_empty());
 }
+
+#[test]
+fn window_codes_one_per_finding() {
+    let d = parse("It is not red but blue, not slow but fast.\n\nOther paragraph.\n");
+    let prose = Prose::new(&d);
+    let findings = [
+        finding(&d, "red", RuleCode(3), Severity::Warning),
+        finding(&d, "blue", RuleCode::REWRITE_REJECTED, Severity::Error),
+        finding(&d, "slow", RuleCode(3), Severity::Warning),
+        finding(&d, "fast", RuleCode(2), Severity::Suggestion),
+        finding(&d, "Other", RuleCode(3), Severity::Warning),
+    ];
+    let plans = windows(&d, &prose, &findings, &[], &settings());
+    let ws = rewrite_plans(&plans);
+    assert_eq!(ws.len(), 2);
+    assert_eq!(ws[0].codes, [RuleCode(3), RuleCode(3), RuleCode(2)]);
+    assert_eq!(ws[0].weight_before, 7);
+    assert_eq!(ws[1].codes, [RuleCode(3)]);
+    assert_eq!(ws[1].weight_before, 3);
+}
