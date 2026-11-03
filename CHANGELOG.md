@@ -2,6 +2,16 @@
 
 ## 0.2.0 (unreleased)
 
+- Added SLP023 `redundant-sentence`: default-off Redundancy suggestion, detection only, since 0.2.0.
+  It compares stemmed content-word counts within paragraphs with provisional `min_overlap = 0.6`
+  (bounds 0.1–1), `min_content_words = 4` (1–100), and `min_sentences = 3` (2–f64::MAX).
+  Reports the earlier sentence's line; never deletes a sentence or selects a model window.
+
+- Added `text::stem::stem` using the in-tree suffix stripper (D-9), with a final-`e` floor of three.
+  The dependency trial with `rust-stemmers = "=1.2.0"` failed the contract `check UNIT=sloperator`:
+  existing formatting errors in SLP004 and calibration stopped it before `cargo deny check` ran, so there
+  is no cargo-deny pass. Chose fallback (b); Cargo.toml and Cargo.lock remain unchanged.
+
 - SLP003 and SLP004 now use Safe-class template fixes in proven contexts. SLP003 deletes short plain denials
   with matching subjects in one sentence; `max_words` defaults to 3 (bounds 1–10). Additive frames stay unfixed.
   SLP004 joins certain single-word pairs as “X and Y”. Other matches may still be rewritten by the model,
@@ -41,7 +51,7 @@
 - Text reports show paragraph reading metrics, original metrics for Fix/Diff, and overall metrics from merged counts.
 - JSON adds `files[].metrics`, `files[].metricsBefore` and `summary.metrics`; `schemaVersion` remains 1 and score keys are unchanged.
 - `[metrics] min_sentences` and `min_words` configure positive sample floors (defaults 5/100). Unavailable values are JSON `null`; text explains the configured floors.
-- Release binary on macOS Apple silicon, same default-feature contract build: 20,160,544 bytes before report integration; 20,156,512 bytes after (4,032 bytes smaller). Measured with `make -f "$AEGIS_DIR/Makefile" build UNIT=sloperator` and `wc -c target/release/sloperator`.
+- Release binary on macOS Apple silicon, same default-feature contract build: 20,160,544 bytes before report integration; 20,156,512 bytes after (4,032 bytes smaller). After Phase 6: 20,307,008 bytes (150,496 bytes above the post-report value). Measured with `make build` and `wc -c target/release/sloperator`.
 
 ## 0.1.0 (2026-11-01)
 

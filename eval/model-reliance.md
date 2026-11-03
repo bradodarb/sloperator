@@ -16,3 +16,4 @@ the test reads only the baseline row.
 | phase 2 | 19.56 | 2026-11-02 |
 | phase 4 | 19.56 | 2026-11-02 |
 | phase 5 | 19.56 | 2026-11-02 |
+| phase 6 | 19.56 | 2026-11-02 |
