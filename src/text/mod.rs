@@ -1,5 +1,8 @@
 //! Classical text analysis (classical-nlp SPEC §4, §9, ADR-01).
 //!
+//! `lexicon` provides compiled closed word lists and contraction-aware negation/modal helpers (SPEC §22).
+//! SLP006 shares its modal list; `to` remains a separate infinitive guard in the rule.
+//!
 //! Build one owned `Prose` per document pass. Segmentation eagerly caches each block's sentence bounds and
 //! every prose word; consumers can query ranges without scanning again. Pair it with its original document.
 //! The pipeline builds it after directive extraction; rules and model windows share its cached segmentation.
@@ -14,6 +17,7 @@ use std::sync::OnceLock;
 
 use crate::doc::Document;
 
+pub mod lexicon;
 pub mod metrics;
 pub mod segment;
 pub mod syllable;
