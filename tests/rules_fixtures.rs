@@ -143,6 +143,7 @@ rule_fixtures!(
         slp001_fix_matches
     ),
     model(2, slp002_positive_fires, slp002_negative_silent),
+    model(23, slp023_positive_fires, slp023_negative_silent),
     safe(
         3,
         slp003_positive_fires,
@@ -852,4 +853,42 @@ fn slp003_additive_rules_only_unchanged() {
                 .any(|f| f.finding.code == RuleCode(3) && f.finding.fix.is_none())
         );
     }
+}
+
+#[test]
+fn slp023_skips_short_sentences_and_documents() {
+    for src in [
+        "Caches work. Caches work. Caches work.\n",
+        "The cache stores compiled build artifacts. The cache stores compiled build artifacts.\n",
+    ] {
+        assert!(findings(23, &parse(src)).is_empty(), "{src}");
+    }
+    let src = read(23, "positive.md");
+    let fs = findings(23, &parse(&src));
+    assert_eq!(fs.len(), 1);
+    assert!(fs[0].message.contains("line 1"));
+    assert!(fs[0].fix.is_none());
+}
+
+#[test]
+fn slp023_compares_within_paragraph_only() {
+    let src = "The cache stores compiled build artifacts.\n\nThe cache stores compiled build artifacts.\n\nThe cache stores compiled build artifacts.\n";
+    assert!(findings(23, &parse(src)).is_empty());
+}
+
+#[test]
+fn slp023_min_sentences_independent_of_metrics() {
+    use sloperator::config::{CliOverrides, Resolver};
+    let tmp = tempfile::tempdir().unwrap();
+    let config = tmp.path().join("sloperator.toml");
+    std::fs::write(
+        &config,
+        "extend_select = [\"SLP023\"]\n[metrics]\nmin_sentences = 10\n",
+    )
+    .unwrap();
+    let settings = Resolver::new(CliOverrides::default(), Some(&config))
+        .unwrap()
+        .for_file(&tmp.path().join("doc.md"))
+        .unwrap();
+    assert_eq!(settings.rules[&RuleCode(23)].params["min_sentences"], 3.0);
 }

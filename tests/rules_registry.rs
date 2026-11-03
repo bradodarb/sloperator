@@ -21,7 +21,7 @@ fn at_least_15_rules_covering_nine_families() {
     let codes: BTreeSet<RuleCode> = reg.all().map(|r| r.meta().code).collect();
     assert_eq!(codes.len(), reg.all().count(), "duplicate rule codes");
     assert!(codes.len() >= 15, "{} rules", codes.len());
-    assert_eq!(codes.len(), 22, "the catalogue includes SLP022");
+    assert_eq!(codes.len(), 23, "the catalogue includes SLP023");
     let families = [
         Family::AiVocabulary,
         Family::NegativeParallelism,
@@ -70,6 +70,7 @@ fn every_rule_has_code_name_severity_state_fix() {
         (20, (Suggestion, NoFix)),
         (21, (Suggestion, NoFix)),
         (22, (Suggestion, NoFix)),
+        (23, (Suggestion, NoFix)),
     ]
     .into_iter()
     .collect();
@@ -204,20 +205,31 @@ fn slp018_metadata_and_families() {
 
 #[test]
 fn metric_rules_explain_provisional() {
-    for code in 18..=21 {
+    for code in [18, 19, 20, 21, 23] {
         let meta = Registry::builtin()
             .get(RuleCode(code))
             .expect("metric rule registered")
             .meta();
         assert!(meta.explain.contains("provisional"), "SLP{code}");
-        assert_eq!(meta.family, Family::Readability);
+        assert_eq!(
+            meta.family,
+            if code == 23 {
+                Family::Redundancy
+            } else {
+                Family::Readability
+            }
+        );
         assert_eq!(meta.severity, Severity::Suggestion);
         assert!(!meta.default_on);
         assert_eq!(meta.fix, FixClass::None);
         assert_eq!(meta.since, "0.2.0");
         assert_eq!(meta.params.len(), 3);
-        assert_eq!(meta.params[1].name, "min_sentences");
-        assert_eq!(meta.params[2].name, "min_words");
+        if code == 23 {
+            assert_eq!(meta.params[2].name, "min_sentences");
+        } else {
+            assert_eq!(meta.params[1].name, "min_sentences");
+            assert_eq!(meta.params[2].name, "min_words");
+        }
     }
     let explain = Registry::builtin()
         .get(RuleCode(19))

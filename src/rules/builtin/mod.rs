@@ -26,6 +26,7 @@ mod slp019_sentence_length_variation;
 mod slp020_long_sentences;
 mod slp021_lexical_diversity;
 mod slp022_weak_intensifier;
+mod slp023_redundant_sentence;
 
 pub fn all() -> Vec<Box<dyn Rule>> {
     vec![
@@ -51,5 +52,6 @@ pub fn all() -> Vec<Box<dyn Rule>> {
         slp020_long_sentences::rule(),
         slp021_lexical_diversity::rule(),
         slp022_weak_intensifier::rule(),
+        slp023_redundant_sentence::rule(),
     ]
 }
