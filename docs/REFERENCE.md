@@ -204,6 +204,16 @@ form of “be”. SLP001's new default-on rows can change default findings, scor
 | Code | Name | Family | Severity | Fix | Default | Detects |
 |------|------|--------|----------|-----|---------|---------|
 | SLP022 | `weak-intensifier` | Wordiness | suggestion | none | off | absolutely, actually, basically, extremely, highly, incredibly, literally, quite, really, totally, truly, very |
+| SLP023 | `redundant-sentence` | Redundancy | suggestion | none | off | repeated content within a paragraph; provisional overlap and sample thresholds |
+
+SLP023 `redundant-sentence` (Redundancy, suggestion, fix class `None`, default-off, since 0.2.0) reports
+later sentences whose stemmed content-word counts overlap an earlier sentence in the same paragraph.
+Its provisional parameters are `min_overlap = 0.6` (bounds 0.1–1), `min_content_words = 4` (1–100), and
+`min_sentences = 3` (2–f64::MAX, counting paragraph sentences across the document). Stop words and letterless
+tokens are removed; weighted Jaccard uses summed minimum counts divided by summed maximum counts.
+The finding names the earlier sentence's line. Enable with `extend_select = ["SLP023"]` and
+`min_severity = "suggestion"`. It never fixes or selects a model window: deletion cannot be verified.
+Its sentence minimum is independent of `[metrics]` floors.
 
 SLP022 has no params and is available since 0.2.0. Enable it with `extend_select = ["SLP022"]` and
 `min_severity = "suggestion"`. It reports emphasis without deleting it: removal changes strength, which the

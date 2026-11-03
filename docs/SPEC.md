@@ -1038,6 +1038,7 @@ SLP022 is a default-off Wordiness suggestion with no params or fix, also since 0
 | SLP020 | `long-sentences` | Readability | suggestion | none | average paragraph sentence words > `max_avg_words` (default 25; bounds 1–1000) | — |
 | SLP021 | `lexical-diversity` | Readability | suggestion | none | lowercase type/token ratio < `min_ttr` (default 0.4; bounds 0–1) | — |
 | SLP022 | `weak-intensifier` | Wordiness | suggestion | none | absolutely, actually, basically, extremely, highly, incredibly, literally, quite, really, totally, truly, very; no params, default-off | — |
+| SLP023 | `redundant-sentence` | Redundancy | suggestion | none | within-paragraph weighted Jaccard of stemmed content-word counts ≥ `min_overlap` (default 0.6; bounds 0.1–1), each sentence ≥ `min_content_words` (4; 1–100), document ≥ `min_sentences` paragraph sentences (3; 2–f64::MAX); provisional, default-off, since 0.2.0 | No deletion or model window; reports the later sentence and names the earlier line. Independent of `[metrics]` floors. |
 
 SLP001's wider wordiness scope keeps its default-on status, so default output can gain findings and safe fixes.
 Noun-final rows require a proven closed sentence/complement or fronted adverbial context; noun modifiers,
