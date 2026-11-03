@@ -388,19 +388,22 @@ drives them.
 ## Report (`report`)
 
 `report::render(format, results, &summary, color, out)` writes the file results in one `OutputFormat` (`text`,
-`concise`, `json`, `github`; a `clap::ValueEnum`, `text` by default). `Summary::of(results, errors)` totals a run:
+`concise`, `json`, `github`; a `clap::ValueEnum`, `text` by default). `Summary::of(results, errors, &floors)` totals a run:
 files, findings, `bySeverity` (suggestion, warning, error), files fixed, SLP901 `rejected`, SLP902 `skipped`, the
-overall word-weighted score, and failed paths. `check --output-format` picks the format.
+overall word-weighted score, metrics derived from merged file counts with the run floors, and failed paths. `check --output-format` picks the format.
 
 - Order is stable (FR-3.6): `render` sorts files by `Origin` (files by path, then stdin) and findings by start
   position, so the caller's collection order never shows.
 - **text:** `path:line:col SLP001 [warning] message`, the source line indented four spaces, and a caret line under
   the matched characters (to the line's end for a multi-line finding). Each file then gets
-  `path: score 12.40 (37 weighted / 2,984 words)`, and the run ends with a blank line and a one-line summary.
+  `path: score 12.40 (37 weighted / 2,984 words)`, followed by `path: metrics …`.
+  Fix/Diff adds `path: metrics before …` between score and final metrics. After the blank line and unchanged
+  summary line, `overall metrics …` shows values derived from merged final counts.
 - **concise:** exactly one line per finding, `path:line:col: SLP001 [warning] message`. Line breaks in a message
   become spaces.
 - **json:** one document and a newline, camelCase keys: `schemaVersion` (1), `ruleSetVersion`, `files` (each with
-  `path`, `score`, `scoreBefore` (`null` for lint) and `findings`), and `summary`. Every finding carries its own
+  `path`, `score`, `scoreBefore` (`null` for lint), `metrics`, `metricsBefore` (`null` for lint) and `findings`),
+  and `summary` (including `metrics`). The additive metrics keys keep `schemaVersion` at 1 and preserve the score shape. Every finding carries its own
   `path`, plus `code`, `name`, `severity`, `start`/`end` (`line`, `column`), `message`, `matched` and
   `fix: {available, class}`. `available` is true for a safe-class finding with a fix attached and for every
   model-class finding. The system codes are named `rewrite-rejected` and `window-skipped`, class `none`. A code that
@@ -442,6 +445,35 @@ Weights: suggestion 1, warning 3, error 9. `round2` rounds to two decimals, so t
 - `score::overall` is word-weighted across files: `Σ weighted / Σ prose_words` over all files, not a mean of the
   per-file values.
 - The same input and config give the same score. `score` is pure and reads only findings and word counts.
+
+## Text metrics
+
+Metrics are style indicators, not a measure of quality or provenance.
+
+Metrics count paragraph blocks only: headings, list items, table cells and protected spans are excluded.
+Words follow Unicode word segmentation; sentences without a prose word are skipped. Syllables are approximate:
+vowel groups, silent-e / -ed / -es rules and a small exception table estimate English pronunciation.
+
+With W words, S sentences, Y syllables and T distinct lowercased word types:
+
+- Average sentence length = W / S.
+- Grade level (Flesch–Kincaid) = 0.39 × (W / S) + 11.8 × (Y / W) − 15.59.
+- Sentence-length variation is the population standard deviation, SD = sqrt((S × Σ sentence_length² − W²) / S²).
+  Its coefficient of variation, CV, is SD / (W / S). Sometimes called “burstiness”, this is sentence-length
+  variation, not the perplexity measure used by detectors.
+- Type/token ratio = T / W. It tends to fall as text grows; avoid comparing documents of very different lengths.
+
+Values are derived from integer counts and rounded once to two decimals. Overall metrics merge the counts and
+union the word types across files before deriving values; they never average per-file metrics.
+Below either sample floor, every derived value is unavailable (JSON `null`). Defaults are 5 sentences and
+100 words; top-level `[metrics] min_sentences` and `min_words` accept integers at least 1.
+Per-file reports use that file's resolved floors. Overall metrics use the explicit `--config` chain, else the
+nearest config above the working directory, else defaults. Unavailable text names those floors.
+
+JSON keys are `files[].metrics`, `files[].metricsBefore` and `summary.metrics`. A metrics object has `words`,
+`sentences`, `avgSentenceLength`, `gradeLevel`, `sentenceLengthSd`, `sentenceLengthCv` and `typeTokenRatio`.
+`metricsBefore` is null for lint and holds the original counts' values for Fix/Diff; `metrics` describes the
+surviving final text. These additive fields keep `schemaVersion` at 1. Concise and GitHub output omit metrics.
 
 ## Limits
 

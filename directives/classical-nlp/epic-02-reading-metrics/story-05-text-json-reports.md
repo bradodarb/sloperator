@@ -53,4 +53,4 @@
 
 The summary JSON assertion (tests/report.rs:166-168) gains a `metrics` object with every value `null`. Measure the binary size with `make build` before and after, and write both sizes into the CHANGELOG. The CLI tests in tests/text_metrics.rs follow tests/score.rs:82-99.
 
-Gate: `make -f "$AEGIS_DIR/Makefile" test UNIT=sloperator TESTS='sloperator::report text_metrics#json_identical_across_runs text_metrics#summary_uses_run_root_floors'`
+Gate: `make -f "$AEGIS_DIR/Makefile" test UNIT=sloperator TESTS='sloperator::report sloperator::text_metrics#json_identical_across_runs sloperator::text_metrics#summary_uses_run_root_floors'`
