@@ -14,8 +14,8 @@ Often it's just too long.
 
 ## What it does
 
-- 22 deterministic rules catch padding, AI tics and reading patterns, and fix the safe ones.
-  The four reading-metric rules and weak-intensifier rule are opt-in.
+- 23 deterministic rules catch padding, AI tics and reading patterns, and fix the safe ones.
+  The four reading-metric rules, weak-intensifier rule and redundant-sentence rule are opt-in.
 - A small local model tightens what's left.
 - Every rewrite is verified before it's kept. If it drops a number, a link or a code block, or doesn't reduce the
   findings, the original stays.
@@ -70,6 +70,47 @@ sloperator rules                        # list the rules
 Each rule, with its fix class and an example, is in the [rule reference](docs/REFERENCE.md#rule-core-rules), or run
 `sloperator rules SLP001`. Flags, exit codes, directives and `sloperator.toml` are in the
 [reference](docs/REFERENCE.md).
+
+## Classical NLP, before the model
+
+The 0.2.0 additions use classical natural language processing: word lists, grammatical patterns and counts.
+These techniques run locally without a model download, including with `--rules-only`.
+
+- **Shared sentence and word boundaries.** Rules, reading metrics and model-window planning reuse one cached
+  segmentation per document pass. Analysis uses prose spans, keeping protected content such as code out of word
+  counts.
+- **Reading metrics.** An English syllable heuristic counts vowel groups, adjusts silent endings and checks an
+  exception list. Together with paragraph word and sentence counts, it produces a Flesch–Kincaid grade estimate,
+  average sentence length, sentence-length variation and type–token ratio (distinct lowercased words divided by
+  total words). Reports include these metrics even when readability rules are off. By default, derived values
+  require at least 5 sentences and 100 words; configure those floors in `[metrics]`.
+- **Part-of-speech tagging.** A small Brill-style tagger starts with a lexicon, guesses unknown words from their
+  endings and applies contextual rules. SLP006 uses only certain tags to authorize additional fixes:
+  “The library serves as a guide” becomes “The library is a guide.” Ambiguous subjects remain unfixed.
+  Tags are computed only when needed and cached for that pass.
+- **Phrase and template rewrites.** SLP001 replaces padded wording such as “make a decision” with “decide”.
+  SLP003 and SLP004 use guarded templates for short contrast and “not just … but also” constructions.
+  A matching phrase gets an automatic fix only when its surrounding grammar meets the rule's checks.
+- **Stemming and sentence similarity.** SLP023 removes stop words, reduces inflections with a small suffix
+  stripper, then compares content-word counts using weighted Jaccard similarity: shared counts divided by
+  combined counts. It flags overlapping sentences within a paragraph, with a default threshold of 0.6.
+  This measures word overlap; it cannot establish that two claims mean the same thing, so it never deletes a
+  sentence or requests a model rewrite.
+
+SLP018–SLP021 flag grade level, uniform sentence lengths, long average sentences and low lexical diversity.
+SLP022 flags weak intensifiers; SLP023 flags possible redundancy. All six are opt-in suggestions with no automatic
+fix. To see them alongside the default rules, add these top-level keys to `sloperator.toml`:
+
+```toml
+extend_select = ["SLP018", "SLP019", "SLP020", "SLP021", "SLP022", "SLP023"]
+min_severity = "suggestion"
+```
+
+The verifier also checks negations, modal verbs and capitalised words as a proxy for names, alongside existing
+number, link and structure checks. These are heuristics, not a guarantee of preserved meaning. Reading scores
+and similarity thresholds are provisional signals for review, not measures of writing quality. See the
+[rule reference](docs/REFERENCE.md#rule-core-rules) for parameters and the
+[classical NLP design](docs/classical-nlp/ARCHITECTURE-classical-nlp.md) for implementation details.
 
 ## MCP server
 
