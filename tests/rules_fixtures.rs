@@ -288,6 +288,28 @@ fn slp004_ambiguous_pair_selects_model_window() {
 }
 
 #[test]
+fn slp001_preserves_prose_boundary_matches() {
+    for (src, fixed) in [
+        ("We **utilize** the cache.", "We **use** the cache."),
+        ("We *utilize* the cache.", "We *use* the cache."),
+        ("utilize", "use"),
+    ] {
+        let (d, f) = one_finding(1, src);
+        assert_eq!(&d.src[f.range], "utilize");
+        assert_eq!(apply_fixes(1, src), fixed);
+    }
+    let d = doc::parse(
+        Arc::from("leverage"),
+        Format::PlainText,
+        &ProtectSettings::default(),
+    );
+    let found = findings(1, &d);
+    assert_eq!(found.len(), 1);
+    assert_eq!(&d.src[found[0].range.clone()], "leverage");
+    assert!(found[0].fix.is_none());
+}
+
+#[test]
 fn slp001_bare_leverage_has_no_fix() {
     let (d, f) = one_finding(1, "We have leverage over suppliers.\n");
     assert_eq!(&d.src[f.range], "leverage");

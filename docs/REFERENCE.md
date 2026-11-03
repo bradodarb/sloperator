@@ -199,7 +199,8 @@ and “be in agreement with” → “agree with”. Padded phrases include “d
 Noun-final rows fire only in closed, proven contexts: at sentence end, with one allowed complement word plus
 one terminal word, or for fronted adverbial rows followed by a comma and subject pronoun. Relative clauses,
 coordinations and noun modifiers such as “a decision tree” are left alone. “The fact that” rows reject a preceding
-form of “be”. SLP001's new default-on rows can change default findings, scores and safe fixes.
+form of “be”. Matches ending at closing emphasis or EOF retain their findings and safe fixes (bare “leverage”
+remains report-only). SLP001's new default-on rows can change default findings, scores and safe fixes.
 
 | Code | Name | Family | Severity | Fix | Default | Detects |
 |------|------|--------|----------|-----|---------|---------|

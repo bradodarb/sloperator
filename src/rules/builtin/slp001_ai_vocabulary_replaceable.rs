@@ -226,9 +226,14 @@ fn fact_that_allows(text: &str, m: Range<usize>) -> bool {
 /// Both guards for a source range `WordList::find` returned. `false` when the range has no text offset. Rows that are
 /// neither noun-final nor "the fact that" rows always pass, so the 17 existing rows behave as today.
 fn allowed(ctx: &RuleCtx<'_>, bt: &BlockText, src: &Range<usize>) -> bool {
-    let in_text = match (bt.to_text(src.start), bt.to_text(src.end)) {
-        (Some(s), Some(e)) => fact_that_allows(&bt.text, s..e),
-        _ => false,
+    let in_text = match bt.to_text(src.start) {
+        Some(s) => {
+            // The exclusive end may be closing markup or EOF, which to_text deliberately rejects.
+            // WordList returns contiguous prose; verify that range before using its byte length.
+            let m = s..s + src.len();
+            bt.src_range(m.clone()).as_ref() == Some(src) && fact_that_allows(&bt.text, m)
+        }
+        None => false,
     };
     in_text && noun_final_allows(&ctx.doc.src, ctx.prose.segments(), src)
 }
