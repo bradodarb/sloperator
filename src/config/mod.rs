@@ -4,6 +4,8 @@
 //! `--config` file, every matching `[[per_file]]` entry in file order, then CLI flags. At each layer the rule set is
 //! `select` (which replaces the set when present), plus `extend_select`, minus `ignore`. The parent file is never
 //! merged implicitly (FR-7.1, D-8): only `extend` pulls another file in.
+//! Enabled readability rules inherit report sample floors after resolution. Explicit rule minimums below a
+//! report floor fail with the originating config file and parameter; a rule can raise its minimums.
 
 pub mod file;
 
@@ -16,7 +18,8 @@ pub use file::WindowMode;
 
 use crate::Error;
 use crate::rules::registry::Registry;
-use crate::rules::{Enabled, RuleCode, Severity};
+use crate::rules::{Enabled, Family, RuleCode, Severity};
+use crate::text::metrics::Floors;
 use file::{Loaded, config_err};
 
 /// The name discovery looks for in each directory, upward from the input file's directory (FR-7.1).
@@ -63,6 +66,7 @@ pub struct Settings {
     pub respect_gitignore: bool,
     pub protect: ProtectSettings,
     pub model: ModelSettings,
+    pub metrics: Floors,
 }
 
 impl Settings {
@@ -103,6 +107,7 @@ struct Selection {
 struct RuleOverride {
     severity: Option<Severity>,
     params: BTreeMap<&'static str, f64>,
+    param_files: BTreeMap<&'static str, PathBuf>,
 }
 
 #[derive(Debug)]
@@ -147,10 +152,16 @@ impl State {
                 cur.severity = o.severity;
             }
             cur.params.extend(o.params.iter().map(|(k, v)| (*k, *v)));
+            cur.param_files
+                .extend(o.param_files.iter().map(|(k, v)| (*k, v.clone())));
         }
     }
 
-    fn rules(&self, reg: &Registry) -> BTreeMap<RuleCode, RuleConf> {
+    fn rules(
+        &self,
+        reg: &Registry,
+        floors: &Floors,
+    ) -> Result<BTreeMap<RuleCode, RuleConf>, Error> {
         self.set
             .iter()
             .filter_map(|code| reg.get(*code).map(|r| (*code, r.meta())))
@@ -161,8 +172,34 @@ impl State {
                 if let Some(o) = o {
                     params.extend(o.params.iter().map(|(k, v)| (*k, *v)));
                 }
+                if meta.family == Family::Readability {
+                    for (name, floor) in [
+                        ("min_sentences", floors.sentences),
+                        ("min_words", floors.words),
+                    ] {
+                        if !params.contains_key(name) {
+                            continue;
+                        }
+                        match o.and_then(|o| o.params.get(name)) {
+                            Some(value) if *value < floor as f64 => {
+                                let file = o
+                                    .and_then(|o| o.param_files.get(name))
+                                    .map_or(Path::new(COMMAND_LINE), PathBuf::as_path);
+                                return Err(config_err(
+                                    file,
+                                    &format!("rules.{code}.{name}"),
+                                    &format!("minimum is the configured report floor {floor}"),
+                                ));
+                            }
+                            Some(_) => {}
+                            None => {
+                                params.insert(name, floor as f64);
+                            }
+                        }
+                    }
+                }
                 let severity = o.and_then(|o| o.severity).unwrap_or(meta.severity);
-                (code, RuleConf { severity, params })
+                Ok((code, RuleConf { severity, params }))
             })
             .collect()
     }
@@ -244,9 +281,24 @@ impl Resolver {
         }
         state.apply(&self.cli);
         let mut s = (*chain.base).clone();
-        s.rules = state.rules(self.reg);
+        s.rules = state.rules(self.reg, &s.metrics)?;
         s.min_severity = state.min_severity;
         Ok(Arc::new(s))
+    }
+
+    /// The run's metric floors: explicit config, nearest config above cwd, or built-in defaults.
+    ///
+    /// # Errors
+    /// A config chain that cannot be read or contains invalid settings.
+    pub fn run_floors(&mut self, cwd: &Path) -> Result<Floors, Error> {
+        let chain = match &self.explicit {
+            Some(c) => c.clone(),
+            None => match self.discover(&absolute(cwd)) {
+                Some(p) => self.chain_of(&p)?,
+                None => self.defaults()?,
+            },
+        };
+        Ok(chain.base.metrics)
     }
 
     fn cli_is_empty(&self) -> bool {
@@ -316,6 +368,7 @@ fn build(
     let mut exclude: Vec<String> = Vec::new();
     let mut respect_gitignore = true;
     let mut protect = ProtectSettings::default();
+    let mut metrics = Floors::default();
     let mut model = ModelSettings {
         name: DEFAULT_MODEL_NAME.to_string(),
         path: None,
@@ -409,6 +462,14 @@ fn build(
             )
             .map_err(|e| config_err(p, "protect.patterns", &e.to_string()))?;
         }
+        if let Some(m) = &f.metrics {
+            if let Some(v) = m.min_sentences {
+                metrics.sentences = v.get();
+            }
+            if let Some(v) = m.min_words {
+                metrics.words = v.get();
+            }
+        }
         if let Some(m) = &f.model {
             if let Some(v) = &m.name {
                 model.name = v.clone();
@@ -452,13 +513,14 @@ fn build(
     with_cli.apply(cli);
     let base = Settings {
         source,
-        rules: with_cli.rules(reg),
+        rules: with_cli.rules(reg, &metrics)?,
         min_severity: with_cli.min_severity,
         include,
         exclude,
         respect_gitignore,
         protect,
         model,
+        metrics,
     };
     Ok(Chain {
         base: Arc::new(base),
@@ -520,7 +582,17 @@ fn rule_tables(
                     ));
                 }
             };
+            if n.is_nan() {
+                return Err(config_err(file, &k, "expected a number that is not NaN"));
+            }
+            if n < spec.min {
+                return Err(config_err(file, &k, &format!("minimum is {}", spec.min)));
+            }
+            if n > spec.max {
+                return Err(config_err(file, &k, &format!("maximum is {}", spec.max)));
+            }
             o.params.insert(spec.name, n);
+            o.param_files.insert(spec.name, file.to_path_buf());
         }
         out.insert(c, o);
     }

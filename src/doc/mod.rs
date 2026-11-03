@@ -4,6 +4,10 @@
 //! [`ProtectSettings`], are defined here. Every byte of the source belongs to exactly one [`Span`], which is either
 //! prose or protected. Engines may only propose edits inside prose spans, so "engines see only prose" (FR-8.1) is
 //! decided here and enforced by `verify`.
+//!
+//! [`Document::continuation_prefix_len`] identifies container markup for masking and windowing.
+//! [`BlockText::to_src`] and [`BlockText::to_text`] map prose byte offsets in either direction; protected runs
+//! have no offset mapping.
 
 use std::collections::HashSet;
 use std::ops::Range;
@@ -273,6 +277,20 @@ impl Document {
             .any(|s| matches!(s.kind, SpanKind::Protected(_)))
     }
 
+    /// The container prefix at line start `ls`: the leading spaces, tabs and `>` that are block markup (not prose),
+    /// up to `end`.
+    pub fn continuation_prefix_len(&self, ls: usize, end: usize) -> usize {
+        let bytes = self.src.as_bytes();
+        let mut i = ls;
+        while i < end.min(bytes.len())
+            && matches!(bytes[i], b' ' | b'\t' | b'>')
+            && self.is_protected(&(i..i + 1))
+        {
+            i += 1;
+        }
+        i - ls
+    }
+
     /// The protected bytes as a sorted multiset (SPEC §16). A block's continuation-prefix spans (`> `, list
     /// indentation: markup at the start of a line after the block's first) count once per block and distinct text,
     /// not once per line, so a rewrite that re-wraps the block keeps the multiset.
@@ -326,6 +344,14 @@ impl BlockText {
             .iter()
             .find(|&&(t, _, len)| t <= text_off && text_off < t + len)
             .map(|&(t, s, _)| s + (text_off - t))
+    }
+
+    /// The text byte of a source byte inside a prose segment; `None` for protected bytes or past the end.
+    pub fn to_text(&self, src_off: usize) -> Option<usize> {
+        self.map
+            .iter()
+            .find(|&&(_, s, len)| s <= src_off && src_off < s + len)
+            .map(|&(t, s, _)| t + (src_off - s))
     }
 
     /// The source bytes of a text range; `None` if the range covers an [`OBJ`] or lies outside the text. An empty
@@ -445,5 +471,51 @@ impl Canvas {
             });
         }
         spans
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn to_text_inverts_to_src() {
+        let doc = parse(
+            Arc::from("Café before `code` and after."),
+            Format::Markdown,
+            &ProtectSettings::default(),
+        );
+        let text = doc.block_text(doc.blocks[0].id);
+        for t in 0..text.text.len() {
+            if let Some(s) = text.to_src(t) {
+                assert_eq!(text.to_text(s), Some(t));
+            }
+        }
+        let code = doc.src.find("`code`").unwrap();
+        for s in code..code + "`code`".len() {
+            assert_eq!(text.to_text(s), None);
+        }
+        assert_eq!(text.to_text(doc.src.len()), None);
+        assert_eq!(text.to_text(usize::MAX), None);
+    }
+
+    #[test]
+    fn continuation_prefix_len_skips_quote_markup() {
+        let doc = parse(
+            Arc::from("> First line\n> next line\n"),
+            Format::Markdown,
+            &ProtectSettings::default(),
+        );
+        let ls = doc.src.find("\n").unwrap() + 1;
+        assert_eq!(doc.continuation_prefix_len(ls, doc.src.len()), 2);
+        assert_eq!(doc.continuation_prefix_len(ls, ls + 1), 1);
+
+        let plain = parse(
+            Arc::from("First line\nnext line\n"),
+            Format::PlainText,
+            &ProtectSettings::default(),
+        );
+        let ls = plain.src.find("\n").unwrap() + 1;
+        assert_eq!(plain.continuation_prefix_len(ls, plain.src.len()), 0);
     }
 }

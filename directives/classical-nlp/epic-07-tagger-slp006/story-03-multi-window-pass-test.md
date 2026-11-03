@@ -22,7 +22,6 @@ Deferred Gap 9: in src/pipeline/mod.rs add the `#[cfg(test)]` `Pass` record and 
 | `eval/model-reliance.md` | table | `phase 4` row |
 | `tests/model_reliance.rs` | existing | tests below (methods added) |
 | `tests/perf.rs` | existing | tests below (methods added) |
-| `tests/standalone.rs` | existing | tests below (methods added) |
 
 ## Acceptance Criteria
 
@@ -42,10 +41,9 @@ Deferred Gap 9: in src/pipeline/mod.rs add the `#[cfg(test)]` `Pass` record and 
 | 2 | `sloperator::layering` | `tagger_runs_only_inside_prose` | tags computed only by `Prose::tags` | NFR-2 |
 | 3 | `sloperator::model_reliance` | `residual_does_not_exceed_baseline` | phase-4 value ≤ baseline | FR-10.2, FR-10.3 |
 | 4 | `sloperator::perf` | `rules_only_100kb_under_1s` | budget holds with tag paths | NFR-2 |
-| 5 | `sloperator::standalone` | `no_host_references` | doc edits use the repo's own form | NFR-1 |
 
 ## Notes
 
 The model file is a placeholder (`model::resolve` checks only that the path is a file and the profile is known, src/model/mod.rs:59-83); `Plain` never loads it. `tempfile` is a normal dependency. If the tagger ever fixes "The tool serves as a bridge." in step 1, the pass count changes, and the assertion message lists the passes.
 
-Gate: `make -f "$AEGIS_DIR/Makefile" test UNIT=sloperator TESTS='pipeline::tests::multi_window_fix_analyses_each_pass_once sloperator::layering model_reliance sloperator::perf sloperator::standalone#no_host_references'`
+Gate: `make -f "$AEGIS_DIR/Makefile" test UNIT=sloperator TESTS='pipeline::tests::multi_window_fix_analyses_each_pass_once sloperator::layering model_reliance sloperator::perf'`

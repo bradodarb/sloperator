@@ -71,11 +71,14 @@ fn result(path: &str, findings: Vec<Located>) -> FileResult {
         },
         score_before: None,
         fixed: None,
+        metrics: sloperator::text::Counts::default(),
+        metrics_before: None,
+        floors: sloperator::text::Floors::default(),
     }
 }
 
 fn render(fmt: OutputFormat, results: &[FileResult], color: bool) -> String {
-    let summary = Summary::of(results, 0);
+    let summary = Summary::of(results, 0, &sloperator::text::Floors::default());
     let mut out = Vec::new();
     report::render(fmt, results, &summary, color, &mut out).unwrap();
     String::from_utf8(out).unwrap()
@@ -99,11 +102,23 @@ fn text_shows_path_line_col_code_severity_message_source_line() {
         lines[3],
         "docs/a.md: score 12.40 (37 weighted / 2,984 words)"
     );
-    assert_eq!(lines[4], "");
-    assert!(lines[5].starts_with(
+    assert_eq!(
+        lines[4],
+        "docs/a.md: metrics unavailable (0 sentences, 0 words; needs 5 sentences and 100 words)"
+    );
+    assert_eq!(lines[5], "");
+    assert!(lines[6].starts_with(
         "1 file checked, 1 finding (0 errors, 1 warning, 0 suggestions); overall score "
     ));
-    assert_eq!(lines.len(), 6);
+    assert_eq!(
+        lines[6],
+        "1 file checked, 1 finding (0 errors, 1 warning, 0 suggestions); overall score 12.40 (37 weighted / 2,984 words)"
+    );
+    assert_eq!(
+        lines[7],
+        "overall metrics unavailable (0 sentences, 0 words; needs 5 sentences and 100 words)"
+    );
+    assert_eq!(lines.len(), 8);
 }
 
 #[test]
@@ -135,7 +150,7 @@ fn json_shape_matches_schema() {
     let v: serde_json::Value = serde_json::from_str(&out).unwrap();
 
     assert_eq!(v["schemaVersion"], 1);
-    assert_eq!(v["ruleSetVersion"], "0.1.0");
+    assert_eq!(v["ruleSetVersion"], "0.2.0");
     let a = &v["files"][0];
     assert_eq!(a["path"], "docs/a.md");
     assert_eq!(
@@ -165,7 +180,9 @@ fn json_shape_matches_schema() {
     assert_eq!(
         v["summary"],
         serde_json::json!({"files": 2, "findings": 2, "bySeverity": [0, 2, 0], "fixedFiles": 0, "rejected": 1,
-            "skipped": 0, "score": {"value": 12.4, "proseWords": 5968, "weighted": 74}, "errors": 0})
+            "skipped": 0, "score": {"value": 12.4, "proseWords": 5968, "weighted": 74},
+            "metrics": {"words": 0, "sentences": 0, "avgSentenceLength": null, "gradeLevel": null,
+                "sentenceLengthSd": null, "sentenceLengthCv": null, "typeTokenRatio": null}, "errors": 0})
     );
     let keys: Vec<&String> = v.as_object().unwrap().keys().collect();
     assert_eq!(
@@ -283,4 +300,126 @@ fn unknown_output_format_exits_two() {
     );
     assert_eq!(code, ExitCode::Failure, "stderr: {err}");
     assert!(err.contains("yaml"), "stderr: {err}");
+}
+
+fn metric_counts() -> sloperator::text::Counts {
+    sloperator::text::Counts {
+        words: 100,
+        sentences: 5,
+        syllables: 150,
+        sentence_len_sq: 2200,
+        types: (0..52)
+            .map(|i| format!("word{i}").into_boxed_str())
+            .collect(),
+    }
+}
+
+#[test]
+fn text_metrics_line_lists_values() {
+    let mut f = result("a.md", vec![]);
+    f.metrics = metric_counts();
+    let out = render(OutputFormat::Text, &[f], false);
+    assert!(out.contains("a.md: metrics avg sentence 20.00 words, grade 9.91, sentence-length variation 6.32 (cv 0.32), type/token 0.52\n"));
+}
+
+#[test]
+fn text_fix_prints_metrics_before() {
+    let mut f = result("a.md", vec![]);
+    f.metrics_before = Some(metric_counts());
+    f.metrics = metric_counts();
+    let out = render(OutputFormat::Text, &[f], false);
+    let lines: Vec<_> = out.lines().collect();
+    assert!(lines[0].starts_with("a.md: score "));
+    assert!(lines[1].starts_with("a.md: metrics before avg sentence 20.00"));
+    assert!(lines[2].starts_with("a.md: metrics avg sentence 20.00"));
+}
+
+#[test]
+fn json_file_has_metrics_and_metrics_before() {
+    let mut f = result("a.md", vec![]);
+    f.metrics = metric_counts();
+    f.metrics_before = Some(metric_counts());
+    let out = render(OutputFormat::Json, &[f], false);
+    let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+    assert_eq!(v["schemaVersion"], 1);
+    assert_eq!(v["files"][0]["metrics"]["gradeLevel"], 9.91);
+    assert_eq!(v["files"][0]["metricsBefore"]["words"], 100);
+    assert_eq!(
+        v["files"][0]["score"],
+        serde_json::json!({"value":12.4,"proseWords":2984,"weighted":37})
+    );
+    let out = render(OutputFormat::Json, &[result("a.md", vec![])], false);
+    let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+    assert!(v["files"][0].get("metricsBefore").unwrap().is_null());
+}
+
+#[test]
+fn unavailable_text_names_configured_floors() {
+    let mut f = result("a.md", vec![]);
+    f.metrics = metric_counts();
+    f.metrics.sentences = 6;
+    f.floors = sloperator::text::Floors {
+        sentences: 10,
+        words: 200,
+    };
+    let out = render(OutputFormat::Text, &[f], false);
+    assert!(out.contains(
+        "a.md: metrics unavailable (6 sentences, 100 words; needs 10 sentences and 200 words)"
+    ));
+    let mut f = result("a.md", vec![]);
+    f.metrics = metric_counts();
+    f.floors = sloperator::text::Floors {
+        sentences: 10,
+        words: 100,
+    };
+    let out = render(OutputFormat::Json, &[f], false);
+    let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+    for key in [
+        "avgSentenceLength",
+        "gradeLevel",
+        "sentenceLengthSd",
+        "sentenceLengthCv",
+        "typeTokenRatio",
+    ] {
+        assert!(v["files"][0]["metrics"][key].is_null());
+    }
+}
+
+#[test]
+fn concise_and_github_print_no_metrics() {
+    let mut f = result("a.md", vec![delve()]);
+    f.metrics = metric_counts();
+    f.metrics_before = Some(metric_counts());
+    for fmt in [OutputFormat::Concise, OutputFormat::Github] {
+        assert!(!render(fmt, std::slice::from_ref(&f), false).contains("metrics"));
+    }
+}
+
+#[test]
+fn summary_merges_counts_and_uses_run_floors() {
+    let mut a = result("a.md", vec![]);
+    a.metrics = metric_counts();
+    let mut b = result("b.md", vec![]);
+    b.metrics = metric_counts();
+    b.metrics.words = 200;
+    b.metrics.sentence_len_sq = 8000;
+    let results = [a, b];
+    let floors = sloperator::text::Floors {
+        sentences: 10,
+        words: 100,
+    };
+    let summary = Summary::of(&results, 0, &floors);
+    assert_eq!(summary.metrics.words, 300);
+    assert_eq!(summary.metrics.avg_sentence_length, Some(30.0));
+    assert_eq!(summary.metrics.type_token_ratio, Some(0.17));
+    let floors = sloperator::text::Floors {
+        sentences: 11,
+        words: 400,
+    };
+    let summary = Summary::of(&results, 0, &floors);
+    let mut out = Vec::new();
+    report::render(OutputFormat::Text, &results, &summary, false, &mut out).unwrap();
+    assert!(String::from_utf8(out).unwrap().contains(
+        "overall metrics unavailable (10 sentences, 300 words; needs 11 sentences and 400 words)"
+    ));
 }

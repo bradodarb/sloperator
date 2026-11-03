@@ -127,13 +127,18 @@ heading text, list-item text, table-cell text and quote text are prose.
 
 ## Edit gate (`verify`)
 
-Every edit goes through `verify::edit(doc, proposal, frozen, protect)`, which returns `Verified<Proposal>` or a
+Every edit goes through `verify::edit(doc, proposal, frozen, protect, resolves)`, which returns `Verified<Proposal>` or a
 `Rejection { range, failed: Check, detail }`. Only `verify` can build a `Verified` (private constructor, ADR-05).
 A rejection is reported, never written: the pipeline turns it into SLP901 (see Pipeline below).
 
 - Numbers (`42`, `1,000.5`, `42%`), digit dates (`2024-01-05`), URLs and configured `terms` are compared as
   multisets between the replaced bytes and the replacement. A loss, addition or change is rejected
   (`Numbers`, `Urls`, `Terms`). Reordering is fine.
+- Meaning checks run after configured terms and before reparsing. `Negation` rejects a reduction beyond the
+  allowance: one for rule-origin SLP003/SLP004, or one per SLP003/SLP004 finding in a model window's `resolves`
+  list (duplicates count). Other origins have no allowance. `ProperNouns` preserves the multiset of capitalised,
+  non-sentence-initial words; only rule-origin edits skip closed-list common words. `Modals` preserves the modal
+  multiset, normalising contractions such as “won't” to “will”. Safe fixes pass an empty `resolves` list.
 - An edit overlapping a protected span or a frozen (suppressed) range, or outside the document, is `Protected`.
 - The document is re-parsed with the edit applied. A different block count is `NewBlockMarker` (a new heading or
   list), a different block kind or level is `BlockType`, and different protected bytes (a new fence, say) is
@@ -162,19 +167,78 @@ A rejection is reported, never written: the pipeline turns it into SLP901 (see P
 
 `rules` holds the `Rule` trait (`meta()` and `check(&RuleCtx, &mut Vec<Finding>)`), the metadata types (`Severity`,
 `FixClass`, `Family`, `ParamSpec`, `RuleMeta`), `Finding`, `Enabled` (a rule with its resolved severity and params)
-and the `Registry`. `rules::RuleCode` and `rules::Proposal` are re-exports from `types`. `rules` never uses
+and the `Registry`. Each `ParamSpec` declares inclusive `min` and `max` bounds; `f64::MAX` denotes an unbounded
+upper limit. Config rejects NaN and values outside these bounds, naming the rule and parameter. Existing count
+and rate parameters accept `0..=f64::MAX`. `rules CODE` prints the bounds after each parameter's help;
+MCP `explain_rule` includes `min` and `max`, with `null` for an unbounded maximum.
+`rules::RuleCode` and `rules::Proposal` are re-exports from `types`. `rules` never uses
 `edit`; a fix is a `types::Proposal`. The built-in list is `rules::builtin::all()`; each rule story adds one file
 `src/rules/builtin/slpNNN_<name>.rs` and one line there.
 
-- `rules::detect(doc, &Suppressions, &[Enabled])` runs every enabled rule, drops each finding whose range overlaps a
+- `rules::detect(doc, &Prose, &Suppressions, &[Enabled])` runs every enabled rule, drops each finding whose range overlaps a
   protected span (FR-4.4) or whose start line is suppressed, and sorts by start byte then code. A system code
   (SLP900 and above) is never suppressed.
 - `Registry::builtin()` is built once. `get(code)` and `default_set()` query it. System codes SLP901 and SLP902 are
   not rules and are never in it.
-- The v0.1.0 catalogue is 17 rules (SLP001-SLP017) across all nine families, all on by default with
-  `since = "0.1.0"`. `tests/rules_registry.rs` pins this: `default_set_is_explicit` compares `default_set()` with a
+- The catalogue has 22 rules across eleven populated families. The original SLP001–SLP017 remain on by default
+  with `since = "0.1.0"`; SLP018–SLP021 are opt-in Readability rules with `since = "0.2.0"`. `tests/rules_registry.rs` pins this: `default_set_is_explicit` compares `default_set()` with a
   literal list, so changing the defaults shows up as a test diff, and `new_rules_start_off` fails when a rule whose
   `since` is newer than 0.1.0 is `default_on` (FR-4.5).
+
+SLP001 `ai-vocabulary-replaceable` remains a default-on warning in AiVocabulary with safe fixes, and now also
+covers generic wordiness and nominalisations. Inflected rows include “make a decision” → “decide”,
+“reach a conclusion” → “conclude”, “take into consideration/account” and “give consideration to” → “consider”,
+“conduct/perform an analysis of” → “analyze”, “conduct an investigation into” → “investigate”,
+“provide assistance to” → “help”, “make an attempt to” → “try to”, “have a tendency to” → “tend to”,
+and “be in agreement with” → “agree with”. Padded phrases include “due to/owing to/in light of the fact that”
+→ “because”, “despite/in spite of the fact that” → “although”, “at this point in time/at the present time”
+→ “now”, “in the near future” → “soon”, “on a daily/regular basis” → “daily/regularly”,
+“until such time as” → “until”, “prior to” → “before”, “for the purpose of” → “for”,
+“with the exception of” → “except”, and “in close proximity to” → “near”.
+
+Noun-final rows fire only in closed, proven contexts: at sentence end, with one allowed complement word plus
+one terminal word, or for fronted adverbial rows followed by a comma and subject pronoun. Relative clauses,
+coordinations and noun modifiers such as “a decision tree” are left alone. “The fact that” rows reject a preceding
+form of “be”. Matches ending at closing emphasis or EOF retain their findings and safe fixes (bare “leverage”
+remains report-only). SLP001's new default-on rows can change default findings, scores and safe fixes.
+
+| Code | Name | Family | Severity | Fix | Default | Detects |
+|------|------|--------|----------|-----|---------|---------|
+| SLP022 | `weak-intensifier` | Wordiness | suggestion | none | off | absolutely, actually, basically, extremely, highly, incredibly, literally, quite, really, totally, truly, very |
+| SLP023 | `redundant-sentence` | Redundancy | suggestion | none | off | repeated content within a paragraph; provisional overlap and sample thresholds |
+
+SLP023 `redundant-sentence` (Redundancy, suggestion, fix class `None`, default-off, since 0.2.0) reports
+later sentences whose stemmed content-word counts overlap an earlier sentence in the same paragraph.
+Its provisional parameters are `min_overlap = 0.6` (bounds 0.1–1), `min_content_words = 4` (1–100), and
+`min_sentences = 3` (2–f64::MAX, counting paragraph sentences across the document). Stop words and letterless
+tokens are removed; weighted Jaccard uses summed minimum counts divided by summed maximum counts.
+The finding names the earlier sentence's line. Enable with `extend_select = ["SLP023"]` and
+`min_severity = "suggestion"`. It never fixes or selects a model window: deletion cannot be verified.
+Its sentence minimum is independent of `[metrics]` floors.
+
+SLP022 has no params and is available since 0.2.0. Enable it with `extend_select = ["SLP022"]` and
+`min_severity = "suggestion"`. It reports emphasis without deleting it: removal changes strength, which the
+verifier does not check. No automatic fix or model window is selected.
+
+The four Readability rules are suggestions with fix class `None`, default-off and detection-only: they never
+select a model window. Each reports once on the first paragraph's prose and adds suggestion weight 1 when
+reported. Enable them with `extend_select = ["SLP018", "SLP019", "SLP020", "SLP021"]`; use
+`min_severity = "suggestion"` to include them in the report and score. Thresholds remain provisional.
+
+| Code | Name | Fires when | Threshold (default; inclusive bounds) |
+|------|------|------------|---------------------------------------|
+| SLP018 | `grade-level` | Flesch–Kincaid grade exceeds maximum | `max_grade = 12`; 0–30 |
+| SLP019 | `sentence-length-variation` | population CV falls below minimum | `min_cv = 0.35`; 0–5 |
+| SLP020 | `long-sentences` | mean words per sentence exceeds maximum | `max_avg_words = 25`; 1–1000 |
+| SLP021 | `lexical-diversity` | distinct lowercase words / words falls below minimum | `min_ttr = 0.4`; 0–1 |
+
+All four declare `min_sentences` (default 5) and `min_words` (default 100), static minimum 1 and no finite upper
+bound. Unset minimums inherit the file's `[metrics]` report floors after configuration layers merge.
+An explicit rule minimum may raise a floor but cannot be below it; violations name the rule parameter and floor.
+SLP019 measures sentence-length variation, not perplexity-based burstiness. See [Text metrics](#text-metrics)
+for formulas, counting scope and limits. Every numeric `ParamSpec` has inclusive `min`/`max` bounds; invalid
+config values fail with the dotted key. CLI and MCP rule explanations expose these bounds.
+
 - `tests/rules_fixtures.rs` checks every rule's fixtures (SPEC §10, FR-4.6): `every_rule_has_fixtures` (directory,
   `positive.md`, `negative.md`, and `fixed.md` exactly when the rule is safe), `only_safe_rules_attach_fixes`
   (FR-4.7, over every fixture), and `fix_is_idempotent_over_all_fixtures` (FR-8.9: each safe rule's fixes, applied
@@ -188,11 +252,22 @@ and the `Registry`. `rules::RuleCode` and `rules::Proposal` are re-exports from 
   `SINGULAR_SUBJECT` (`it`, `this`, `that`, `which`, `who`, `he`, `she`, same sentence), a base form after a modal or
   "to" (one adverb allowed between) → "be", and in both cases only when the next word after "as" is in
   `AS_COMPLEMENT` (`a`, `an`, `the`, `its`, `his`, `her`, `their`, `our`, `your`, `my`, `one`, `another`). With no next
-  word in the block, or a protected run after "as", there is no fix. Every other form fires with no fix.
+  word in the block, or a protected run after "as", there is no fix. A further "is" branch accepts
+  sentence-initial determiner/noun subjects, optionally with one adjective, only when all subject tags are
+  certain, the determiner is singular-compatible, and whitespace/protection guards hold. It excludes
+  "as a matter/result/rule/whole" and any following verb or modal in the clause. Thus "The library serves as
+  a guide" becomes "The library is a guide", while ambiguous "The tool serves as a bridge" has no fix.
+  Every other form fires with no fix. Tags are computed lazily once per document pass.
 - Pattern and residue rules (`builtin/slp003_*` … `slp015_*`), all on by default in v0.1.0. Each is a `PatternRule`
   over the prose of a block, so a match never crosses code or a link.
-  - SLP003 `not-x-but-y` and SLP004 `not-just-but-also` (negative parallelism), SLP007 `significance-puffery` and
-    SLP015 `ai-disclaimer` (chatbot residue) are fix class `Model`: they report and attach no fix.
+  - SLP004 `not-just-but-also` is `Safe`: it joins single words as "X and Y" only when both have the same
+    certain content-word tag, Y ends the clause and the pair lies within one sentence. Other matches carry
+    no fix and select a model window. A leading "Not" capitalises X; ambiguous words such as "fast" decline.
+  - SLP003 `not-x-but-y` is `Safe`: in one sentence with matching subjects it deletes the denied clause,
+    keeping the second clause's case except at a sentence start. X and Y must each have at most `max_words`
+    words (default 3, bounds 1–10). Capitalised words, digits or protected runs in X decline, as do additive
+    frames beginning with even/just/merely/only/simply/solely. Other matches select a model window without a fix.
+  - SLP007 `significance-puffery` and SLP015 `ai-disclaimer` remain `Model`: they report and attach no fix.
   - SLP005 `rule-of-three` is `Model`. It counts triads "A, B(,) and C" of items of 1-3 words and reports every one
     only when the count per 1,000 prose words is above its param `max_per_1000_words` (default 4).
   - SLP012 `chatbot-closer` (severity `error`, `Safe`) matches a whole sentence ("I hope this helps!", "Let me know if
@@ -268,6 +343,10 @@ front_matter = true
 math = true
 html = true
 
+[metrics]
+min_sentences = 5                       # positive integer; default 5
+min_words = 100                         # positive integer; default 100
+
 [model]
 name = "qwen3-4b"
 path = "/models/my.gguf"               # relative paths resolve against this file; requires `profile`
@@ -287,6 +366,10 @@ seed = 42
   At each layer the rule set is `select` (when present, it replaces the set), plus `extend_select`, minus `ignore`.
   The defaults are the registry's default set at each rule's own severity and param defaults, `min_severity`
   `warning`, model `qwen3-4b`, window `paragraph`, `max_window_chars` 4000, `max_tokens` 0 and seed 42.
+- **Metric floors.** `[metrics]` is top-level only and inherits each omitted value through `extend`.
+  Both values must be integers at least 1; unknown keys and invalid values name `metrics.<key>` in the error.
+  `Settings.metrics` holds the resolved floors. `Resolver::run_floors(cwd)` uses the explicit `--config` chain,
+  else the nearest config above `cwd`, else 5 sentences and 100 words.
 - **Errors (FR-7.6).** Each of these is `Error::Config { file, key, reason }` with a dotted key such as
   `rules.SLP014.max_per_1000_words`, `per_file[0].glob` or `protect.patterns[1]`: a TOML syntax error (key
   `(syntax)`), an unknown key, a wrong type, an unknown or system rule code, an unknown or non-numeric rule
@@ -380,22 +463,26 @@ drives them.
 ## Report (`report`)
 
 `report::render(format, results, &summary, color, out)` writes the file results in one `OutputFormat` (`text`,
-`concise`, `json`, `github`; a `clap::ValueEnum`, `text` by default). `Summary::of(results, errors)` totals a run:
+`concise`, `json`, `github`; a `clap::ValueEnum`, `text` by default). `Summary::of(results, errors, &floors)` totals a run:
 files, findings, `bySeverity` (suggestion, warning, error), files fixed, SLP901 `rejected`, SLP902 `skipped`, the
-overall word-weighted score, and failed paths. `check --output-format` picks the format.
+overall word-weighted score, metrics derived from merged file counts with the run floors, and failed paths. `check --output-format` picks the format.
 
 - Order is stable (FR-3.6): `render` sorts files by `Origin` (files by path, then stdin) and findings by start
   position, so the caller's collection order never shows.
 - **text:** `path:line:col SLP001 [warning] message`, the source line indented four spaces, and a caret line under
   the matched characters (to the line's end for a multi-line finding). Each file then gets
-  `path: score 12.40 (37 weighted / 2,984 words)`, and the run ends with a blank line and a one-line summary.
+  `path: score 12.40 (37 weighted / 2,984 words)`, followed by `path: metrics …`.
+  Fix/Diff adds `path: metrics before …` between score and final metrics. After the blank line and unchanged
+  summary line, `overall metrics …` shows values derived from merged final counts.
 - **concise:** exactly one line per finding, `path:line:col: SLP001 [warning] message`. Line breaks in a message
   become spaces.
 - **json:** one document and a newline, camelCase keys: `schemaVersion` (1), `ruleSetVersion`, `files` (each with
-  `path`, `score`, `scoreBefore` (`null` for lint) and `findings`), and `summary`. Every finding carries its own
+  `path`, `score`, `scoreBefore` (`null` for lint), `metrics`, `metricsBefore` (`null` for lint) and `findings`),
+  and `summary` (including `metrics`). The additive metrics keys keep `schemaVersion` at 1 and preserve the score shape. Every finding carries its own
   `path`, plus `code`, `name`, `severity`, `start`/`end` (`line`, `column`), `message`, `matched` and
   `fix: {available, class}`. `available` is true for a safe-class finding with a fix attached and for every
-  model-class finding. The system codes are named `rewrite-rejected` and `window-skipped`, class `none`. A code that
+  model-class finding. For SLP003/SLP004, `fix.available` is false on an unfixed Safe-class match even though
+  the model may still rewrite it. The system codes are named `rewrite-rejected` and `window-skipped`, class `none`. A code that
   is neither a built-in rule nor a system code fails the render with an error.
 - **github:** `::warning file=…,line=…,col=…,endLine=…,endColumn=…,title=SLP001 <name>::message`. Suggestion maps to
   `notice`, warning to `warning`, error to `error`. `gh_escape(s, property)` escapes `%`, `\r` and `\n` in the
@@ -435,12 +522,43 @@ Weights: suggestion 1, warning 3, error 9. `round2` rounds to two decimals, so t
   per-file values.
 - The same input and config give the same score. `score` is pure and reads only findings and word counts.
 
+## Text metrics
+
+Metrics are style indicators, not a measure of quality or provenance.
+
+Metrics count paragraph blocks only: headings, list items, table cells and protected spans are excluded.
+Words follow Unicode word segmentation; sentences without a prose word are skipped. Syllables are approximate:
+vowel groups, silent-e / -ed / -es rules and a small exception table estimate English pronunciation.
+
+With W words, S sentences, Y syllables and T distinct lowercased word types:
+
+- Average sentence length = W / S.
+- Grade level (Flesch–Kincaid) = 0.39 × (W / S) + 11.8 × (Y / W) − 15.59.
+- Sentence-length variation is the population standard deviation, SD = sqrt((S × Σ sentence_length² − W²) / S²).
+  Its coefficient of variation, CV, is SD / (W / S). Sometimes called “burstiness”, this is sentence-length
+  variation, not the perplexity measure used by detectors.
+- Type/token ratio = T / W. It tends to fall as text grows; avoid comparing documents of very different lengths.
+
+Values are derived from integer counts and rounded once to two decimals. Overall metrics merge the counts and
+union the word types across files before deriving values; they never average per-file metrics.
+Below either sample floor, every derived value is unavailable (JSON `null`). Defaults are 5 sentences and
+100 words; top-level `[metrics] min_sentences` and `min_words` accept integers at least 1.
+Per-file reports use that file's resolved floors. Overall metrics use the explicit `--config` chain, else the
+nearest config above the working directory, else defaults. Unavailable text names those floors.
+
+JSON keys are `files[].metrics`, `files[].metricsBefore` and `summary.metrics`. A metrics object has `words`,
+`sentences`, `avgSentenceLength`, `gradeLevel`, `sentenceLengthSd`, `sentenceLengthCv` and `typeTokenRatio`.
+`metricsBefore` is null for lint and holds the original counts' values for Fix/Diff; `metrics` describes the
+surviving final text. These additive fields keep `schemaVersion` at 1. Concise and GitHub output omit metrics.
+
 ## Limits
 
 The score measures style tells, not text quality or provenance. sloperator does not make text undetectable and
 makes no such claim.
 
-Verification covers numbers, URLs, configured terms, placeholders and block structure, not names or claim polarity.
+Verification covers numbers, URLs, configured terms, placeholders, block structure, negations, modal verbs and
+capitalised words as a proxy for names. It does not detect every change of meaning: a reworded claim with the same
+negations, modals and capitalised words passes.
 
 ## Model setup
 

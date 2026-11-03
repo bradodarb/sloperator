@@ -8,6 +8,25 @@ use std::path::Path;
 // Rows derived from architecture §5.
 const FORBIDDEN_USES: &[(&str, &[&str])] = &[
     ("src/doc/", &["crate::"]),
+    (
+        "src/text/",
+        &[
+            "crate::rules",
+            "crate::verify",
+            "crate::engine",
+            "crate::pipeline",
+            "crate::report",
+            "crate::config",
+            "crate::input",
+            "crate::write",
+            "crate::edit",
+            "crate::score",
+            "crate::directives",
+            "crate::model",
+            "crate::mcp",
+            "crate::cli",
+        ],
+    ),
     ("src/types.rs", &["crate::"]), // leaf: RuleCode, Proposal, ProposalOrigin (Gap 3)
     (
         "src/rules/",
@@ -39,7 +58,12 @@ const FORBIDDEN_USES: &[(&str, &[&str])] = &[
     ),
     (
         "src/verify/",
-        &["crate::engine", "crate::write", "crate::report"],
+        &[
+            "crate::engine",
+            "crate::write",
+            "crate::report",
+            "crate::rules",
+        ],
     ),
     (
         "src/config/",
@@ -94,6 +118,7 @@ const FORBIDDEN_USES: &[(&str, &[&str])] = &[
     ),
 ];
 const PURE_DIRS: &[&str] = &[
+    "src/text/",
     "src/doc/",
     "src/types.rs",
     "src/rules/",
@@ -186,11 +211,11 @@ fn pure_modules_have_no_io() {
     );
 }
 
-/// Asserts that `needle` appears in no `src/` file except `allowed`.
-fn only_in(needles: &[&str], allowed: &str) {
+/// Asserts that each needle appears only in the allowed source files.
+fn only_in_files(needles: &[&str], allowed: &[&str]) {
     let violations: Vec<String> = src_files()
         .into_iter()
-        .filter(|(path, _)| path != allowed)
+        .filter(|(path, _)| !allowed.contains(&path.as_str()))
         .flat_map(|(path, text)| {
             needles
                 .iter()
@@ -201,9 +226,14 @@ fn only_in(needles: &[&str], allowed: &str) {
         .collect();
     assert!(
         violations.is_empty(),
-        "only {allowed} may mention these:\n{}",
+        "only {allowed:?} may mention these:\n{}",
         violations.join("\n")
     );
+}
+
+/// Single-file convenience wrapper for the shared source scan.
+fn only_in(needles: &[&str], allowed: &str) {
+    only_in_files(needles, &[allowed]);
 }
 
 #[test]
@@ -224,4 +254,33 @@ fn mcp_sdk_only_in_server() {
 #[test]
 fn single_exit_point() {
     only_in(&["std::process::exit"], "src/main.rs");
+}
+
+#[test]
+fn prose_built_only_per_pass() {
+    // Window and rule module exceptions are for their in-crate tests; review keeps construction there.
+    only_in_files(
+        &["Prose::new("],
+        &[
+            "src/pipeline/mod.rs",
+            "src/text/mod.rs",
+            "src/engine/window.rs",
+            "src/rules/mod.rs",
+        ],
+    );
+}
+
+#[test]
+fn segmentation_runs_only_inside_prose() {
+    only_in(&["segment::segment("], "src/text/mod.rs");
+}
+
+#[test]
+fn sentence_scan_only_in_segmenter() {
+    only_in(&["split_sentence_bound_indices"], "src/text/segment.rs");
+}
+
+#[test]
+fn tagger_runs_only_inside_prose() {
+    only_in(&["tagger::tag("], "src/text/mod.rs");
 }

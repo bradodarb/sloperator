@@ -29,6 +29,9 @@ fn result(origin: Origin, original: &str, fixed: Option<&str>) -> FileResult {
         score: ZERO,
         score_before: Some(ZERO),
         fixed: fixed.map(str::to_string),
+        metrics: sloperator::text::Counts::default(),
+        metrics_before: None,
+        floors: sloperator::text::Floors::default(),
     }
 }
 

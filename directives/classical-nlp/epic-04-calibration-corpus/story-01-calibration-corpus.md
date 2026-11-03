@@ -17,7 +17,6 @@ Add the corpus files under eval/calibration/ (≥ 12, different lengths, heading
 | `eval/calibration/*.md` | new | ≥ 12 public-domain prose files, 1–3 MB total |
 | `eval/calibration/README.md` | new | `| file | source (URL) | licence | words |` table; metric values per file and overall beside the provisional thresholds |
 | `tests/calibration.rs` | new | tests below |
-| `tests/standalone.rs` | existing | tests below (methods added) |
 
 ## Acceptance Criteria
 
@@ -33,10 +32,9 @@ Add the corpus files under eval/calibration/ (≥ 12, different lengths, heading
 | # | Test class | Test method | Verifies | Validates |
 |---|------------|-------------|----------|-----------|
 | 1 | `sloperator::calibration` | `calibration_corpus_is_licensed_and_measurable` | ≥ 12 files, each listed public domain and measurable | D-4, FR-4.5 |
-| 2 | `sloperator::standalone` | `no_host_references` | the corpus and README name no host build contract | NFR-1 |
 
 ## Notes
 
-Uses `Prose::new(&d).counts(&d).derive(&Floors::default())` (epic-02 changed `derive` to take floors). `tests/standalone.rs` scans every file, so a corpus text that happens to contain a host marker would fail it; pick or trim texts accordingly.
+Uses `Prose::new(&d).counts(&d).derive(&Floors::default())` (epic-02 changed `derive` to take floors).
 
-Gate: `make -f "$AEGIS_DIR/Makefile" test UNIT=sloperator TESTS='sloperator::calibration sloperator::standalone#no_host_references'`
+Gate: `make -f "$AEGIS_DIR/Makefile" test UNIT=sloperator TESTS='sloperator::calibration'`

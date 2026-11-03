@@ -299,3 +299,152 @@ fn rejection_is_slp901_warning_counts_for_exit() {
     // SLP901 is not scored (DQ-4): the score is that of the kept text's SLP015 alone.
     assert_eq!(r.score.weighted, r.score_before.as_ref().unwrap().weighted);
 }
+
+#[test]
+fn lint_reports_counts_and_resolved_floors() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut src = source(tmp.path(), "# Heading\n\nCat cat. Dog!\n");
+    Arc::make_mut(&mut src.settings).metrics = sloperator::text::Floors {
+        sentences: 10,
+        words: 200,
+    };
+    let a = pipeline::analyse(src).unwrap();
+    let expected = a.prose.counts(&a.doc).clone();
+    let r = pipeline::lint(a);
+    assert_eq!(r.metrics, expected);
+    assert_eq!(r.metrics.words, 3);
+    assert_eq!(r.metrics.sentences, 2);
+    assert_eq!(r.metrics_before, None);
+    assert_eq!(
+        r.floors,
+        sloperator::text::Floors {
+            sentences: 10,
+            words: 200
+        }
+    );
+}
+
+#[test]
+fn whole_document_rejection_keeps_original_metrics() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut a = pipeline::analyse(source(tmp.path(), "utilize cat utilize dog.")).unwrap();
+    let expected = a.prose.counts(&a.doc).clone();
+    // Individually unmatched backticks pass per-edit checks; together they protect inline code.
+    let mut proposals = 0;
+    for f in &mut a.findings {
+        if f.code == RuleCode(1) {
+            f.fix.as_mut().unwrap().replacement = "`".into();
+            proposals += 1;
+        }
+    }
+    assert_eq!(proposals, 2);
+    let r = pipeline::fix(a, RULES_ONLY, None, DEFAULT_SEED).unwrap();
+    assert!(r.findings.iter().any(|l| {
+        l.finding
+            .message
+            .starts_with("rewrite rejected (document):")
+    }));
+    assert_eq!(r.fixed, None);
+    assert_eq!(r.metrics_before, Some(expected.clone()));
+    assert_eq!(r.metrics, expected);
+}
+
+#[test]
+fn enabling_metric_rule_adds_suggestion_weight() {
+    let tmp = tempfile::tempdir().unwrap();
+    let text = std::fs::read_to_string(common::fixture("rules/SLP018/positive.md")).unwrap();
+    let src = source(tmp.path(), &text);
+    let path = tmp.path().join("doc.md");
+    let mut baseline = src.clone();
+    Arc::make_mut(&mut baseline.settings).min_severity = Severity::Suggestion;
+    let before = pipeline::lint(pipeline::analyse(baseline).unwrap());
+    let mut resolver = Resolver::new(
+        CliOverrides {
+            extend_select: vec!["SLP018".into()],
+            min_severity: Some(Severity::Suggestion),
+            ..CliOverrides::default()
+        },
+        None,
+    )
+    .unwrap();
+    let settings = resolver.for_file(&path).unwrap();
+    let after = pipeline::lint(pipeline::analyse(Source { settings, ..src }).unwrap());
+    assert_eq!(
+        after
+            .findings
+            .iter()
+            .filter(|l| l.finding.code == RuleCode(18))
+            .count(),
+        1
+    );
+    assert_eq!(after.score.weighted, before.score.weighted + 1);
+    assert_eq!(after.score.prose_words, before.score.prose_words);
+}
+
+#[test]
+fn rejected_new_check_is_slp901_with_name() {
+    let tmp = tempfile::tempdir().unwrap();
+    let text = "We do not utilize it.";
+    let mut a = pipeline::analyse(source(tmp.path(), text)).unwrap();
+    let fix = a
+        .findings
+        .iter_mut()
+        .find(|f| f.code == RuleCode(1))
+        .unwrap()
+        .fix
+        .as_mut()
+        .unwrap();
+    fix.range = text.find("not").unwrap()..text.find("utilize").unwrap() + "utilize".len();
+    fix.replacement = "use".into();
+    let r = pipeline::fix(a, RULES_ONLY, None, DEFAULT_SEED).unwrap();
+    assert_eq!(r.fixed, None);
+    assert_eq!(&*r.original, text);
+    let rejected: Vec<_> = r
+        .findings
+        .iter()
+        .filter(|l| l.finding.code == RuleCode::REWRITE_REJECTED)
+        .collect();
+    assert_eq!(rejected.len(), 1);
+    assert!(
+        rejected[0]
+            .finding
+            .message
+            .starts_with("rewrite rejected (negation):")
+    );
+}
+
+#[test]
+fn failing_template_fix_is_slp901() {
+    use sloperator::edit::{Proposal, ProposalOrigin};
+    let text = "It is not only cheap but also Paris.\n";
+    let tmp = tempfile::tempdir().unwrap();
+    let mut a = pipeline::analyse(source(tmp.path(), text)).unwrap();
+    let f = a
+        .findings
+        .iter_mut()
+        .find(|f| f.code == RuleCode(4))
+        .expect("SLP004 fires");
+    let start = text.find("not only").unwrap();
+    f.fix = Some(Proposal {
+        range: start..text.find('.').unwrap(),
+        replacement: "cheap and quick".into(),
+        origin: ProposalOrigin::Rule(RuleCode(4)),
+    });
+    let r = pipeline::fix(a, RULES_ONLY, None, DEFAULT_SEED).unwrap();
+    assert!(r.fixed.is_none(), "original bytes must be kept");
+    assert_eq!(&*r.original, text);
+    let rejected: Vec<_> = r
+        .findings
+        .iter()
+        .filter(|f| f.finding.code == RuleCode::REWRITE_REJECTED)
+        .collect();
+    assert_eq!(rejected.len(), 1);
+    assert!(
+        rejected[0]
+            .finding
+            .message
+            .starts_with("rewrite rejected (properNouns):"),
+        "{}",
+        rejected[0].finding.message
+    );
+}

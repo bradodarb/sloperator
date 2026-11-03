@@ -49,7 +49,7 @@ fn verified(d: &Document, needle: &str, replacement: &str) -> Verified<Proposal>
         replacement,
         ProposalOrigin::Model,
     );
-    verify::edit(d, p, &[], &ProtectSettings::default()).unwrap()
+    verify::edit(d, p, &[], &ProtectSettings::default(), &[]).unwrap()
 }
 
 /// Verifies one edit and applies it with the document's own newline style.
@@ -203,7 +203,7 @@ fn plan_then_apply_splices_several_edits() {
     let edits: Vec<Verified<Proposal>> = plan
         .kept
         .into_iter()
-        .map(|p| verify::edit(&d, p, &[], &ProtectSettings::default()).unwrap())
+        .map(|p| verify::edit(&d, p, &[], &ProtectSettings::default(), &[]).unwrap())
         .collect();
     assert_eq!(
         edit::apply(src, &edits, d.newline),

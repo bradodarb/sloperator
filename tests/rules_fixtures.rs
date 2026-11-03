@@ -10,6 +10,8 @@ mod common;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use sloperator::text::Prose;
+
 use common::fixture;
 use sloperator::directives::Suppressions;
 use sloperator::doc::{self, Document, Format, ProtectSettings};
@@ -50,7 +52,8 @@ fn findings(code: u16, d: &Document) -> Vec<Finding> {
             .map(|p| (p.name, p.default))
             .collect(),
     };
-    detect(d, &Suppressions::default(), &[enabled])
+    let prose = Prose::new(d);
+    detect(d, &prose, &Suppressions::default(), &[enabled])
 }
 
 fn fix_class(code: u16) -> FixClass {
@@ -70,7 +73,7 @@ fn apply_fixes(code: u16, src: &str) -> String {
     let verified: Vec<Verified<Proposal>> = plan
         .kept
         .into_iter()
-        .map(|p| verify::edit(&d, p, &[], &protect).unwrap())
+        .map(|p| verify::edit(&d, p, &[], &protect, &[]).unwrap())
         .collect();
     edit::apply(src, &verified, d.newline)
 }
@@ -140,8 +143,19 @@ rule_fixtures!(
         slp001_fix_matches
     ),
     model(2, slp002_positive_fires, slp002_negative_silent),
-    model(3, slp003_positive_fires, slp003_negative_silent),
-    model(4, slp004_positive_fires, slp004_negative_silent),
+    model(23, slp023_positive_fires, slp023_negative_silent),
+    safe(
+        3,
+        slp003_positive_fires,
+        slp003_negative_silent,
+        slp003_fix_matches
+    ),
+    safe(
+        4,
+        slp004_positive_fires,
+        slp004_negative_silent,
+        slp004_fix_matches
+    ),
     model(5, slp005_positive_fires, slp005_negative_silent),
     safe(
         6,
@@ -195,6 +209,11 @@ rule_fixtures!(
         slp017_negative_silent,
         slp017_fix_matches
     ),
+    model(18, slp018_positive_fires, slp018_negative_silent),
+    model(19, slp019_positive_fires, slp019_negative_silent),
+    model(20, slp020_positive_fires, slp020_negative_silent),
+    model(21, slp021_positive_fires, slp021_negative_silent),
+    model(22, slp022_positive_fires, slp022_negative_silent),
 );
 
 #[test]
@@ -226,6 +245,68 @@ fn one_finding(code: u16, src: &str) -> (Document, Finding) {
     let mut found = findings(code, &d);
     assert_eq!(found.len(), 1, "{found:?}");
     (d, found.remove(0))
+}
+
+#[test]
+fn slp004_declines_when_y_continues() {
+    let (_, f) = one_finding(4, "It is not only cheap but also quick tools.\n");
+    assert!(f.fix.is_none());
+}
+
+#[test]
+fn slp004_declines_across_sentences() {
+    let src = "It is not only cheap. But also quick.\n";
+    assert!(findings(4, &parse(src)).iter().all(|f| f.fix.is_none()));
+    assert_eq!(apply_fixes(4, src), src);
+}
+
+#[test]
+fn slp004_capitalises_leading_not() {
+    assert_eq!(
+        apply_fixes(4, "Not just cheap but also quick.\n"),
+        "Cheap and quick.\n"
+    );
+}
+
+#[test]
+fn slp004_ambiguous_pair_selects_model_window() {
+    let (d, f) = one_finding(4, "The tool is not just fast, but also simple.\n");
+    assert!(f.fix.is_none());
+    let prose = Prose::new(&d);
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("no-config-here/doc.md");
+    let settings =
+        sloperator::config::Resolver::new(sloperator::config::CliOverrides::default(), None)
+            .unwrap()
+            .for_file(&path)
+            .unwrap();
+    let plans = sloperator::engine::window::windows(&d, &prose, &[f], &[], &settings);
+    assert_eq!(plans.len(), 1);
+    assert!(matches!(
+        plans[0],
+        sloperator::engine::window::WindowPlan::Rewrite(_)
+    ));
+}
+
+#[test]
+fn slp001_preserves_prose_boundary_matches() {
+    for (src, fixed) in [
+        ("We **utilize** the cache.", "We **use** the cache."),
+        ("We *utilize* the cache.", "We *use* the cache."),
+        ("utilize", "use"),
+    ] {
+        let (d, f) = one_finding(1, src);
+        assert_eq!(&d.src[f.range], "utilize");
+        assert_eq!(apply_fixes(1, src), fixed);
+    }
+    let d = doc::parse(
+        Arc::from("leverage"),
+        Format::PlainText,
+        &ProtectSettings::default(),
+    );
+    let found = findings(1, &d);
+    assert_eq!(found.len(), 1);
+    assert_eq!(&d.src[found[0].range.clone()], "leverage");
+    assert!(found[0].fix.is_none());
 }
 
 #[test]
@@ -316,6 +397,16 @@ fn safe_fix_contexts_grammatical() {
         (6, "It serves as a bridge.\n", "It is a bridge.\n"),
         (
             6,
+            "The library serves as a guide.\n",
+            "The library is a guide.\n",
+        ),
+        (
+            6,
+            "The main library serves as a guide.\n",
+            "The main library is a guide.\n",
+        ),
+        (
+            6,
             "A cache, which functions as a buffer, is small.\n",
             "A cache, which is a buffer, is small.\n",
         ),
@@ -325,6 +416,23 @@ fn safe_fix_contexts_grammatical() {
             "It can also be a guide.\n",
         ),
         (1, "She leveraged the API.\n", "She used the API.\n"),
+        (1, "We make a decision about it.\n", "We decide about it.\n"),
+        (
+            1,
+            "They made a decision to leave.\n",
+            "They decided to leave.\n",
+        ),
+        (
+            1,
+            "We reached a conclusion before noon.\n",
+            "We concluded before noon.\n",
+        ),
+        (1, "At this point in time, we stop.\n", "Now, we stop.\n"),
+        (
+            1,
+            "We stayed due to the fact that it rained.\n",
+            "We stayed because it rained.\n",
+        ),
     ];
     for (code, src, want) in fixed {
         assert_eq!(apply_fixes(code, src), want, "{src:?}");
@@ -334,6 +442,10 @@ fn safe_fix_contexts_grammatical() {
         (6, "They served as mentors.\n"),
         (6, "Both serve as anchors.\n"),
         (6, "The tool serves as a bridge.\n"),
+        (6, "Export the library functions as a module.\n"),
+        (6, "The library functions as a module are deprecated.\n"),
+        (6, "The library serves as a whole.\n"),
+        (6, "The fast library serves as a guide.\n"),
         (6, "Please export these functions as a module.\n"),
         (6, "We expose helper functions as a convenience.\n"),
         (6, "It functions as follows.\n"),
@@ -352,6 +464,68 @@ fn safe_fix_contexts_grammatical() {
         assert!(!found.is_empty(), "no finding for {src:?}");
         assert!(found.iter().all(|f| f.fix.is_none()), "{src:?}: {found:?}");
         assert_eq!(apply_fixes(code, src), src);
+    }
+}
+
+const GUARD_COUNTER_CONTEXTS: &[&str] = &[
+    "We make a decision tree.",
+    "They made a decision table.",
+    "We made a decision that surprised us.",
+    "The delay is due to the fact that we left.",
+    "It's due to the fact that we left.",
+    "There is a sufficient number of seats.",
+    "We met in the event that ran in May.",
+    "We reached a conclusion with which everyone agreed.",
+    "We made a decision about which everyone complained.",
+    "We made a decision with consequences.",
+    "We made a decision and a plan.",
+    "We made a decision to the contrary.",
+    "At the present time and place we stop.",
+    "We made a decision to leave and a plan to return.",
+    "We made a decision to leave rather than a plan to stay.",
+    "We reached a conclusion before noon and a deal after lunch.",
+    "We meet on a daily basis until June and a weekly basis after.",
+    "We made a decision, a bold one.",
+    "We made a decision, and a plan.",
+    "Making a decision, we found it hard.",
+];
+
+#[test]
+fn slp001_guard_drops_unprovable_contexts() {
+    for src in GUARD_COUNTER_CONTEXTS {
+        assert!(findings(1, &parse(src)).is_empty(), "{src:?}");
+        assert_eq!(apply_fixes(1, src), *src, "{src:?}");
+    }
+}
+
+#[test]
+fn slp001_every_row_in_positive() {
+    let src = read(1, "positive.md");
+    let found = findings(1, &parse(&src));
+    let module = include_str!("../src/rules/builtin/slp001_ai_vocabulary_replaceable.rs");
+    let table = module
+        .split("static ENTRIES:")
+        .nth(1)
+        .unwrap()
+        .split("];")
+        .next()
+        .unwrap();
+    let phrases: Vec<&str> = table
+        .lines()
+        .filter_map(|line| {
+            line.trim()
+                .strip_prefix("(\"")
+                .and_then(|rest| rest.split('\"').next())
+        })
+        .collect();
+    assert_eq!(phrases.len(), 82);
+    assert_eq!(found.len(), phrases.len());
+    for phrase in phrases {
+        let count = found
+            .iter()
+            .filter(|f| src[f.range.clone()].eq_ignore_ascii_case(phrase))
+            .count();
+        assert_eq!(count, 1, "{phrase}");
     }
 }
 
@@ -536,4 +710,207 @@ fn fix_is_idempotent_over_all_fixtures() {
             );
         }
     }
+}
+
+#[test]
+fn metric_rule_silent_when_unavailable() {
+    let sentence = read(18, "positive.md");
+    let first = sentence.split('.').next().unwrap();
+    let text = format!("{first}. {first}. {first}.");
+    let doc = parse(&text);
+    let prose = sloperator::text::Prose::new(&doc);
+    assert_eq!(prose.counts(&doc).sentences, 3);
+    assert!(findings(18, &doc).is_empty());
+}
+
+#[test]
+fn slp022_reports_all_twelve_intensifiers_without_fixes() {
+    let doc = parse(&read(22, "positive.md"));
+    let found = findings(22, &doc);
+    let mut words: Vec<_> = found
+        .iter()
+        .map(|f| doc.src[f.range.clone()].to_lowercase())
+        .collect();
+    words.sort();
+    assert_eq!(
+        words,
+        [
+            "absolutely",
+            "actually",
+            "basically",
+            "extremely",
+            "highly",
+            "incredibly",
+            "literally",
+            "quite",
+            "really",
+            "totally",
+            "truly",
+            "very"
+        ]
+    );
+    for f in found {
+        let word = &doc.src[f.range.clone()];
+        assert_eq!(
+            f.message,
+            format!("`{word}` adds emphasis, not meaning; consider deleting it")
+        );
+        assert!(f.fix.is_none());
+    }
+}
+
+#[test]
+fn no_safe_fixture_fix_newly_rejected() {
+    for rule in Registry::builtin()
+        .all()
+        .filter(|r| r.meta().fix == FixClass::Safe)
+    {
+        let code = rule.meta().code.0;
+        for name in ["positive.md", "negative.md", "fixed.md"] {
+            let src = read(code, name);
+            let d = parse(&src);
+            let proposals = findings(code, &d)
+                .into_iter()
+                .filter_map(|f| f.fix)
+                .collect();
+            for proposal in edit::plan(proposals, &[]).kept {
+                verify::edit(&d, proposal, &[], &ProtectSettings::default(), &[])
+                    .unwrap_or_else(|e| panic!("SLP{code:03}/{name}: {e:?}"));
+            }
+        }
+    }
+}
+
+#[test]
+fn slp008_preserves_modal_in_should_preamble() {
+    let d = parse("It should be noted that the cache is cold.");
+    let found = findings(8, &d);
+    assert_eq!(found.len(), 1);
+    assert!(found[0].fix.is_none());
+    assert_eq!(apply_fixes(8, &d.src), d.src.as_ref());
+}
+
+#[test]
+fn slp003_declines_on_long_x_or_other_subject() {
+    for src in [
+        "It's not a bug that we can fix in an hour, it's a feature.\n",
+        "This isn't a framework — it's a mindset.\n",
+        "It's not a rule. It's a habit.\n",
+    ] {
+        let (_, f) = one_finding(3, src);
+        assert!(f.fix.is_none(), "{src}");
+        assert_eq!(apply_fixes(3, src), src);
+    }
+}
+
+#[test]
+fn slp003_mid_sentence_keeps_case() {
+    assert_eq!(
+        apply_fixes(3, "I think it's not a bug, it's a feature.\n"),
+        "I think it's a feature.\n"
+    );
+}
+
+#[test]
+fn slp003_declines_additive_frame() {
+    for focus in ["even", "just", "merely", "only", "simply", "solely"] {
+        let src = format!("It's not {focus} cheap, it's quick.\n");
+        let (_, f) = one_finding(3, &src);
+        assert!(f.fix.is_none(), "{src}");
+        assert_eq!(apply_fixes(3, &src), src);
+    }
+    assert_eq!(
+        apply_fixes(3, "It's not a bug, it's a feature.\n"),
+        "It's a feature.\n"
+    );
+}
+
+#[test]
+fn slp003_max_words_config_limit() {
+    use sloperator::config::{CliOverrides, Resolver};
+    let tmp = tempfile::tempdir().unwrap();
+    let config = tmp.path().join("sloperator.toml");
+    std::fs::write(&config, "[rules.SLP003]\nmax_words = 11\n").unwrap();
+    let result = Resolver::new(CliOverrides::default(), Some(&config))
+        .and_then(|mut r| r.for_file(&tmp.path().join("doc.md")));
+    assert!(result.is_err());
+}
+
+#[test]
+fn slp003_additive_rules_only_unchanged() {
+    use sloperator::config::{CliOverrides, Resolver};
+    use sloperator::input::{Origin, Source};
+    use sloperator::pipeline::{self, Engines};
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("doc.md");
+    for src in [
+        "It's not only cheap, it's quick.\n",
+        "It's not just cheap, it's quick.\n",
+    ] {
+        let settings = Resolver::new(CliOverrides::default(), None)
+            .unwrap()
+            .for_file(&path)
+            .unwrap();
+        let source = Source {
+            origin: Origin::File(path.clone()),
+            format: Format::Markdown,
+            text: Arc::from(src),
+            settings,
+        };
+        let result = pipeline::fix(
+            pipeline::analyse(source).unwrap(),
+            Engines {
+                rules: true,
+                model: false,
+            },
+            None,
+            sloperator::engine::DEFAULT_SEED,
+        )
+        .unwrap();
+        assert!(result.fixed.is_none(), "{src}");
+        assert!(
+            result
+                .findings
+                .iter()
+                .any(|f| f.finding.code == RuleCode(3) && f.finding.fix.is_none())
+        );
+    }
+}
+
+#[test]
+fn slp023_skips_short_sentences_and_documents() {
+    for src in [
+        "Caches work. Caches work. Caches work.\n",
+        "The cache stores compiled build artifacts. The cache stores compiled build artifacts.\n",
+    ] {
+        assert!(findings(23, &parse(src)).is_empty(), "{src}");
+    }
+    let src = read(23, "positive.md");
+    let fs = findings(23, &parse(&src));
+    assert_eq!(fs.len(), 1);
+    assert!(fs[0].message.contains("line 1"));
+    assert!(fs[0].fix.is_none());
+}
+
+#[test]
+fn slp023_compares_within_paragraph_only() {
+    let src = "The cache stores compiled build artifacts.\n\nThe cache stores compiled build artifacts.\n\nThe cache stores compiled build artifacts.\n";
+    assert!(findings(23, &parse(src)).is_empty());
+}
+
+#[test]
+fn slp023_min_sentences_independent_of_metrics() {
+    use sloperator::config::{CliOverrides, Resolver};
+    let tmp = tempfile::tempdir().unwrap();
+    let config = tmp.path().join("sloperator.toml");
+    std::fs::write(
+        &config,
+        "extend_select = [\"SLP023\"]\n[metrics]\nmin_sentences = 10\n",
+    )
+    .unwrap();
+    let settings = Resolver::new(CliOverrides::default(), Some(&config))
+        .unwrap()
+        .for_file(&tmp.path().join("doc.md"))
+        .unwrap();
+    assert_eq!(settings.rules[&RuleCode(23)].params["min_sentences"], 3.0);
 }

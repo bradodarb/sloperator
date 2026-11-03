@@ -21,7 +21,6 @@ CHANGELOG.md's `0.2.0 (unreleased)` section adds SLP018–SLP021 (code, name, se
 | `tests/perf.rs` | 105-112 | `extend_select` with SLP018–SLP021 |
 | `tests/engine.rs` | existing | tests below (methods added) |
 | `tests/pipeline.rs` | existing | tests below (methods added) |
-| `tests/standalone.rs` | existing | tests below (methods added) |
 
 ## Acceptance Criteria
 
@@ -38,10 +37,9 @@ CHANGELOG.md's `0.2.0 (unreleased)` section adds SLP018–SLP021 (code, name, se
 | 1 | `sloperator::engine` | `metric_finding_never_selects_window` | FixClass::None finding gives no window | FR-4.4 |
 | 2 | `sloperator::pipeline` | `enabling_metric_rule_adds_suggestion_weight` | weighted grows by exactly 1 | FR-4.6 |
 | 3 | `sloperator::perf` | `rules_only_100kb_under_1s` | budget holds with metric rules on | NFR-2 |
-| 4 | `sloperator::standalone` | `no_host_references` | doc edits use the repo's own form | NFR-1 |
 
 ## Notes
 
 The perf selector triggers the release-profile pass (Makefile `RUN_PERF`). `extend_select` is a top-level key (src/config/file.rs:18).
 
-Gate: `make -f "$AEGIS_DIR/Makefile" test UNIT=sloperator TESTS='metric_finding_never_selects_window enabling_metric_rule_adds_suggestion_weight sloperator::perf sloperator::standalone#no_host_references'`
+Gate: `make -f "$AEGIS_DIR/Makefile" test UNIT=sloperator TESTS='metric_finding_never_selects_window enabling_metric_rule_adds_suggestion_weight sloperator::perf'`

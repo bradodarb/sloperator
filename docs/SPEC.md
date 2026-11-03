@@ -234,8 +234,9 @@ check; the reference detail lives in those two docs):
 - Usage: `check`, `--fix`, `--diff`, input forms, exit codes, output formats, directives, config reference.
 - Score formula (FR-5.1): the formula from §11, with the weights.
 - Limits, stating FR-5.4 word for word: "The score measures style tells, not text quality or provenance.
-  sloperator does not make text undetectable and makes no such claim." Also: verification covers numbers, URLs,
-  configured terms, placeholders and block structure, not names or claim polarity (PRD Risk 1).
+  sloperator does not make text undetectable and makes no such claim." Also: Verification covers numbers, URLs,
+  configured terms, placeholders, block structure, negations, modal verbs and capitalised words as a proxy for names.
+  It does not detect every change of meaning: a reworded claim with the same negations, modals and capitalised words passes (PRD Risk 1).
 - Model setup: `sloperator model pull`, the cache location and the registry table. Weights are never committed or
   embedded (FR-9.10).
 - Building: Phase 0 prerequisites, `cargo build --release --locked`, and `--no-default-features` for a rules-only
@@ -1008,17 +1009,19 @@ pub struct PatternRule { pub set: regex::RegexSet, pub regexes: Vec<regex::Regex
 **Component:** §4.6 rules (ADR-06); architecture §6 fixtures
 **Implements:** FR-4.2, FR-4.3, FR-4.6, FR-4.7, D-4
 
-The catalogue has 17 rules across all nine families (FR-4.2). Every rule is in the default set for v0.1.0, and
-`since = "0.1.0"`.
+The catalogue has 22 rules across eleven populated families (FR-4.2). SLP001–SLP017 remain in the default set,
+with `since = "0.1.0"`. SLP018–SLP021 are default-off Readability suggestions, `since = "0.2.0"`.
+Their thresholds are provisional; all are detection-only and select no model window.
+SLP022 is a default-off Wordiness suggestion with no params or fix, also since 0.2.0.
 
 | Code | Name | Family | Severity | Fix | Detects | Safe fix |
 |------|------|--------|----------|-----|---------|----------|
-| SLP001 | `ai-vocabulary-replaceable` | AiVocabulary | warning | safe | "delve(s/d) into" / "delving into", "utilize(s/d)" / "utilizing", "in order to", "facilitate(s/d)" / "facilitating"; "leverages", "leveraged", "leveraging" (verb-only inflections). Bare "leverage" is reported with **no fix** (noun/verb ambiguous, Gap 2) | inflection-matched: "look(s/ed) at" / "looking at", "use(s/d)" / "using", "to", "help(s/ed)" / "helping", "uses" / "used" / "using" (case kept) |
+| SLP001 | `ai-vocabulary-replaceable` | AiVocabulary | warning | safe | "delve(s/d) into" / "delving into", "utilize(s/d)" / "utilizing", "in order to", "facilitate(s/d)" / "facilitating"; "leverages", "leveraged", "leveraging" (verb-only inflections). Bare "leverage" is reported with **no fix** (noun/verb ambiguous, Gap 2). Also inflected nominalisations (“make a decision”, “reach a conclusion”, “take into consideration/account”, “give consideration to”, “conduct/perform an analysis of”, “conduct an investigation into”, “provide assistance to”, “make an attempt to”, “have a tendency to”, “be in agreement with”) and padded phrases (“due to the fact that”, “at this point in time”, “on a daily basis”, “prior to”, etc.) in proven grammatical contexts; remains default-on | original inflection-matched replacements (case kept); nominalisations → “decide”, “conclude”, “consider”, “analyze”, “investigate”, “help”, “try to”, “tend to”, “agree with”; padded phrases → “because”, “although”, “now”, “soon”, “daily”, “regularly”, “until”, “before”, “for”, “except”, “near” |
 | SLP002 | `ai-vocabulary` | AiVocabulary | suggestion | model | "tapestry", "testament", "multifaceted", "pivotal", "realm", "seamless", "robust" | — |
-| SLP003 | `not-x-but-y` | NegativeParallelism | warning | model | "it's not X, it's Y"; "this isn't X — it's Y", in one sentence or two adjacent sentences | — |
-| SLP004 | `not-just-but-also` | NegativeParallelism | warning | model | "not just X, but (also) Y"; "not only X but also Y" | — |
+| SLP003 | `not-x-but-y` | NegativeParallelism | warning | safe | "it's not X, it's Y"; "this isn't X — it's Y", in one sentence or two adjacent sentences | Delete the denied clause only within one sentence with matching subjects and X/Y each at most `max_words` (default 3, bounds 1–10); decline additive frames and capital/digit/protected X. Other matches remain model-eligible with `fix.available = false`. |
+| SLP004 | `not-just-but-also` | NegativeParallelism | warning | safe | "not just X, but (also) Y"; "not only X but also Y" | Join single-word X/Y as "X and Y" only with matching certain content-word tags, in one sentence, with Y ending the clause. Other matches remain model-eligible with `fix.available = false`; the JSON schema is unchanged. |
 | SLP005 | `rule-of-three` | RuleOfThree | suggestion | model | triads "A, B(,) and C" of items of 1-3 words, above `max_per_1000_words` (default 4) | — |
-| SLP006 | `copula-avoidance` | CopulaAvoidance | warning | safe | "serve/stand/function as" in every inflection | Only where the part of speech and the agreement are both certain from a fixed guard on the preceding token: "serves/stands/functions as" → "is" **only** when the token immediately before it, in the same sentence and matched case-insensitively, is one of `it`, `this`, `that`, `which`, `who`, `he`, `she`, **and** the token immediately after "as" is in `AS_COMPLEMENT` (Gap 16, design note). Each of the three words is also a plural noun ("export these functions as a module", "the market stands as …"), so after any other token the rule fires with **no fix** (Gap 14). A base form after a modal or "to" (`can`, `could`, `may`, `might`, `must`, `shall`, `should`, `will`, `would`, `to`, optionally with one adverb between) → "be", again **only** when the token after "as" is in `AS_COMPLEMENT`. "as" also opens fixed phrases ("as follows", "as well as", "as long as", "as such") where the verb is no copula stand-in, so any other following token fires with **no fix** (Gap 16). Every other form ("served as", "serving as", a base form after a plural subject) is reported with **no fix**, so the model engine takes it (Gap 2) |
+| SLP006 | `copula-avoidance` | CopulaAvoidance | warning | safe | "serve/stand/function as" in every inflection | Only where the part of speech and agreement are certain from fixed guards or certain subject tags: the existing "serves/stands/functions as" → "is" branch applies when the token immediately before it, in the same sentence and matched case-insensitively, is one of `it`, `this`, `that`, `which`, `who`, `he`, `she`, **and** the token immediately after "as" is in `AS_COMPLEMENT` (Gap 16, design note). Each of the three words is also a plural noun ("export these functions as a module", "the market stands as …"), so other preceding tokens require the tag-gated subject branch or receive **no fix** (Gap 14). The tag-gated branch accepts sentence-initial Det N or Det Adj N subjects with certain tags, a singular-compatible determiner, whitespace-only unprotected gaps, and an `AS_COMPLEMENT` following token. It excludes `as a matter/result/rule/whole` and any following verb or modal in the clause; ambiguous subjects such as "The tool" remain unfixed. Tags are cached lazily once per document pass. A base form after a modal or "to" (`can`, `could`, `may`, `might`, `must`, `shall`, `should`, `will`, `would`, `to`, optionally with one adverb between) → "be", again **only** when the token after "as" is in `AS_COMPLEMENT`. "as" also opens fixed phrases ("as follows", "as well as", "as long as", "as such") where the verb is no copula stand-in, so any other following token fires with **no fix** (Gap 16). Every other form ("served as", "serving as", a base form after a plural subject) is reported with **no fix**, so the model engine takes it (Gap 2) |
 | SLP007 | `significance-puffery` | SignificancePuffery | warning | model | "plays a crucial/pivotal/vital role", "underscores the importance", "a testament to", "marks a significant milestone" | — |
 | SLP008 | `hedging-preamble` | Hedging | warning | safe | sentence-initial "It's important to note that", "It is worth noting that", "It should be noted that" | delete it and capitalise the next letter |
 | SLP009 | `stacked-hedge` | Hedging | suggestion | safe | "may potentially", "could possibly", "might perhaps" | keep the first word |
@@ -1030,8 +1033,27 @@ The catalogue has 17 rules across all nine families (FR-4.2). Every rule is in t
 | SLP015 | `ai-disclaimer` | ChatbotResidue | error | model | "As of my last (knowledge) update", "As an AI language model" | — |
 | SLP016 | `summary-signpost` | SignificancePuffery | suggestion | safe | "In conclusion,", "In summary,", "Overall,", or "Ultimately," at the start of a block's last sentence | delete it and capitalise |
 | SLP017 | `decorative-emoji` | Markup | warning | safe | pictographic emoji in prose, one finding per grapheme cluster (ZWJ sequence, skin tone, flag, keycap): supplementary-plane `Extended_Pictographic`, BMP `Emoji_Presentation` (✅, ⏳), other BMP pictographs (©, ®, ™) only with U+FE0F, digits/`#`/`*` only as keycaps | delete the emoji (a space-separated cluster at once) and one adjacent space: the one after, or the one before at a line end or before closing punctuation; no fix when it is the only prose on its line (bare list item, heading) or sits between letters or after opening markup |
+| SLP018 | `grade-level` | Readability | suggestion | none | paragraph Flesch–Kincaid grade > `max_grade` (default 12; bounds 0–30) | — |
+| SLP019 | `sentence-length-variation` | Readability | suggestion | none | population sentence-length CV < `min_cv` (default 0.35; bounds 0–5); not perplexity-based burstiness | — |
+| SLP020 | `long-sentences` | Readability | suggestion | none | average paragraph sentence words > `max_avg_words` (default 25; bounds 1–1000) | — |
+| SLP021 | `lexical-diversity` | Readability | suggestion | none | lowercase type/token ratio < `min_ttr` (default 0.4; bounds 0–1) | — |
+| SLP022 | `weak-intensifier` | Wordiness | suggestion | none | absolutely, actually, basically, extremely, highly, incredibly, literally, quite, really, totally, truly, very; no params, default-off | — |
+| SLP023 | `redundant-sentence` | Redundancy | suggestion | none | within-paragraph weighted Jaccard of stemmed content-word counts ≥ `min_overlap` (default 0.6; bounds 0.1–1), each sentence ≥ `min_content_words` (4; 1–100), document ≥ `min_sentences` paragraph sentences (3; 2–f64::MAX); provisional, default-off, since 0.2.0 | No deletion or model window; reports the later sentence and names the earlier line. Independent of `[metrics]` floors. |
 
-**Fixture contract (FR-4.6).** `tests/rules_fixtures.rs` uses a macro, `rule_fixtures!(1, 2, …, 17)`. For each
+SLP001's wider wordiness scope keeps its default-on status, so default output can gain findings and safe fixes.
+Noun-final rows require a proven closed sentence/complement or fronted adverbial context; noun modifiers,
+relative clauses and coordinated/appended complements are refused. “The fact that” rows refuse preceding
+forms of “be”. SLP022 is detection-only because removing intensifiers changes strength, which verification
+does not check; no model window is selected.
+
+All four metric rules declare `min_sentences` (default 5) and `min_words` (default 100), each with static minimum
+1 and maximum `f64::MAX`. After config layers merge, unset minimums inherit `Settings.metrics`; explicit values
+below the report floors are `Error::Config` naming the rule parameter and floor. Comparisons use rounded metrics
+over paragraph prose only. Each rule reports once at the first paragraph's prose and contributes weight 1 when
+suggestions are reported; none attaches a fix. Every `ParamSpec` has inclusive `min`/`max` bounds validated by
+config and exposed by CLI/MCP explanations.
+
+**Fixture contract (FR-4.6).** `tests/rules_fixtures.rs` uses a macro, `rule_fixtures!` with entries for SLP001–SLP022. For each
 code it generates `slpNNN_positive_fires`, `slpNNN_negative_silent` and, for safe rules only,
 `slpNNN_fix_matches`. A further test, `every_rule_has_fixtures`, walks `Registry::builtin()` and fails if any of
 these holds:

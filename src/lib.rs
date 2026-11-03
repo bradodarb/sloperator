@@ -17,6 +17,7 @@ pub mod pipeline;
 pub mod report;
 pub mod rules;
 pub mod score;
+pub mod text;
 pub mod types;
 pub mod verify;
 pub mod write;

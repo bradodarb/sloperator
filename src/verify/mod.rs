@@ -2,14 +2,18 @@
 //! can build a [`Verified`], so an unverified byte is never written.
 //!
 //! A rejection is a finding, not an error: `pipeline` turns each [`Rejection`] into SLP901 and the original text
-//! stays. Verification covers numbers, URLs, terms and block structure, not names or claim polarity.
+//! stays. Verification covers numbers, URLs, configured terms, placeholders, block structure, negations, modal
+//! verbs and capitalised words as a proxy for names. It does not detect every change of meaning: a reworded claim
+//! with the same negations, modals and capitalised words passes.
 
 use std::ops::Range;
 use std::sync::Arc;
 
 use crate::doc::{self, Document, ProtectReason, ProtectSettings, SpanKind};
-use crate::types::Proposal;
+use crate::text::segment;
+use crate::types::{Proposal, ProposalOrigin, RuleCode};
 
+mod meaning;
 mod tokens;
 
 pub use tokens::{Tokens, tokens};
@@ -48,6 +52,12 @@ pub enum Check {
     NoImprovement,
     /// The whole-document check ([`document`]).
     Document,
+    /// The edit drops negations beyond the originating rule or window's allowance.
+    Negation,
+    /// The edit changes capitalized non-sentence-initial words (a proxy for names).
+    ProperNouns,
+    /// The edit changes the multiset of modal verbs.
+    Modals,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -61,12 +71,15 @@ pub struct Rejection {
 ///
 /// The edit is rejected when it touches a protected or frozen range, loses, adds or changes a number, URL or
 /// configured term, or when the document parsed after the edit has a different block structure or different
-/// protected bytes.
+/// protected bytes. Meaning checks also reject dropped negations beyond the permitted allowance, changed
+/// capitalized non-initial words and changed modals. `resolves` lists a model window's finding codes (duplicates
+/// retained); rule-origin edits instead use their own code and skip common capitalized words.
 pub fn edit(
     doc: &Document,
     p: Proposal,
     frozen: &[Range<usize>],
     protect: &ProtectSettings,
+    resolves: &[RuleCode],
 ) -> Result<Verified<Proposal>, Rejection> {
     let r = p.range.clone();
     let reject = |failed, detail: String| Rejection {
@@ -102,6 +115,31 @@ pub fn edit(
             Check::Terms,
             tokens::diff(&before.terms, &after.terms),
         ));
+    }
+    let initial = starts_at_sentence(doc, r.start);
+    let skip_common = matches!(p.origin, ProposalOrigin::Rule(_));
+    let (mb, ma) = (
+        meaning::meaning(original, initial, skip_common),
+        meaning::meaning(&p.replacement, initial, skip_common),
+    );
+    let allowance = meaning::negation_allowance(p.origin, resolves);
+    if ma.negations.saturating_add(allowance) < mb.negations {
+        return Err(reject(
+            Check::Negation,
+            format!(
+                "negations {} -> {} (allowance {allowance})",
+                mb.negations, ma.negations
+            ),
+        ));
+    }
+    if mb.proper != ma.proper {
+        return Err(reject(
+            Check::ProperNouns,
+            tokens::diff(&mb.proper, &ma.proper),
+        ));
+    }
+    if mb.modals != ma.modals {
+        return Err(reject(Check::Modals, tokens::diff(&mb.modals, &ma.modals)));
     }
     let candidate: Arc<str> = format!(
         "{}{}{}",
@@ -177,4 +215,18 @@ pub fn document(before: &Document, after: &Document) -> Result<(), Rejection> {
         return Err(reject("protected bytes changed".into()));
     }
     Ok(())
+}
+
+/// Whether the edit begins at a sentence boundary in its block's prose coordinates.
+fn starts_at_sentence(doc: &Document, at: usize) -> bool {
+    let Some(block) = doc
+        .blocks
+        .iter()
+        .find(|b| b.range.start <= at && at < b.range.end)
+    else {
+        return false;
+    };
+    let bt = doc.block_text(block.id);
+    bt.to_text(at)
+        .is_some_and(|t| segment::starts_sentence(&bt.text, t))
 }

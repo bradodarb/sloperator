@@ -13,6 +13,7 @@ use sloperator::cli::ExitCode;
 use sloperator::config::{CliOverrides, Resolver, Settings, WindowMode};
 use sloperator::rules::registry::Registry;
 use sloperator::rules::{RuleCode, Severity};
+use sloperator::text::Floors;
 
 fn codes(s: &Settings) -> Vec<u16> {
     s.rules.keys().map(|c| c.0).collect()
@@ -409,4 +410,280 @@ fn config_command_prints_resolved_json() {
     );
     assert_eq!(code, ExitCode::Failure, "stderr: {err}");
     assert!(err.contains("model.windwo"), "stderr: {err}");
+}
+
+#[test]
+fn metrics_floors_default_to_5_and_100() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut r = Resolver::new(CliOverrides::default(), None).unwrap();
+    assert_eq!(
+        r.for_file(&tmp.path().join("doc.md")).unwrap().metrics,
+        Floors {
+            sentences: 5,
+            words: 100
+        }
+    );
+    let config = tmp.path().join("sloperator.toml");
+    write(&config, "select = [\"SLP001\"]\n");
+    let mut r = Resolver::new(CliOverrides::default(), Some(&config)).unwrap();
+    assert_eq!(
+        r.for_file(&tmp.path().join("doc.md")).unwrap().metrics,
+        Floors::default()
+    );
+}
+
+#[test]
+fn metrics_floors_load_from_table() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    write(
+        &root.join("sloperator.toml"),
+        "[metrics]\nmin_sentences = 10\nmin_words = 200\n",
+    );
+    let mut r = Resolver::new(CliOverrides::default(), None).unwrap();
+    for path in ["doc.md", "sub/deep/doc.md"] {
+        assert_eq!(
+            r.for_file(&root.join(path)).unwrap().metrics,
+            Floors {
+                sentences: 10,
+                words: 200
+            }
+        );
+    }
+    // Each explicitly set field overrides the chain; omitted fields inherit.
+    let child = root.join("child.toml");
+    write(
+        &child,
+        "extend = \"sloperator.toml\"\n[metrics]\nmin_words = 300\n[[per_file]]\nglob = \"**/*.md\"\nmin_severity = \"error\"\n",
+    );
+    let mut r = Resolver::new(CliOverrides::default(), Some(&child)).unwrap();
+    write(&root.join("sub/doc.md"), "text\n");
+    let s = r.for_file(&root.join("sub/doc.md")).unwrap();
+    assert_eq!(
+        s.metrics,
+        Floors {
+            sentences: 10,
+            words: 300
+        }
+    );
+    assert_eq!(s.min_severity, Severity::Error);
+    let small = root.join("small.toml");
+    write(&small, "[metrics]\nmin_sentences = 1\nmin_words = 1\n");
+    let mut r = Resolver::new(CliOverrides::default(), Some(&small)).unwrap();
+    assert_eq!(
+        r.for_file(&root.join("doc.md")).unwrap().metrics,
+        Floors {
+            sentences: 1,
+            words: 1
+        }
+    );
+}
+
+#[test]
+fn metrics_floors_reject_invalid_values() {
+    let tmp = tempfile::tempdir().unwrap();
+    let config = tmp.path().join("bad.toml");
+    for (line, expected) in [
+        ("min_sentences = 0", "metrics.min_sentences"),
+        ("min_words = -5", "metrics.min_words"),
+        ("min_words = 1.5", "metrics.min_words"),
+        ("max = 3", "metrics.max"),
+        ("min_words = \"100\"", "metrics.min_words"),
+        ("min_sentences = false", "metrics.min_sentences"),
+    ] {
+        write(&config, &format!("[metrics]\n{line}\n"));
+        let (file, key, reason) = config_error(&config);
+        assert_eq!(file, canon(&config));
+        assert_eq!(key, expected, "{line}: {reason}");
+        assert!(!reason.is_empty());
+    }
+    write(
+        &config,
+        "[[per_file]]\nglob = \"*.md\"\n[per_file.metrics]\nmin_words = 200\n",
+    );
+    assert_eq!(config_error(&config).1, "per_file[0].metrics");
+}
+
+#[test]
+fn metrics_floors_run_root() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    let mut defaults = Resolver::new(CliOverrides::default(), None).unwrap();
+    assert_eq!(defaults.run_floors(root).unwrap(), Floors::default());
+    write(
+        &root.join("sloperator.toml"),
+        "[metrics]\nmin_sentences = 10\nmin_words = 200\n",
+    );
+    write(
+        &root.join("sub/sloperator.toml"),
+        "[metrics]\nmin_words = 300\n",
+    );
+    fs::create_dir_all(root.join("sub/deep")).unwrap();
+    let mut r = Resolver::new(CliOverrides::default(), None).unwrap();
+    assert_eq!(
+        r.run_floors(root).unwrap(),
+        Floors {
+            sentences: 10,
+            words: 200
+        }
+    );
+    assert_eq!(
+        r.run_floors(&root.join("sub/deep")).unwrap(),
+        Floors {
+            sentences: 5,
+            words: 300
+        }
+    );
+    // Run floors come from cwd, regardless of a previously resolved input's config.
+    r.for_file(&root.join("doc.md")).unwrap();
+    assert_eq!(
+        r.run_floors(&root.join("sub/deep")).unwrap(),
+        Floors {
+            sentences: 5,
+            words: 300
+        }
+    );
+    let explicit = root.join("explicit.toml");
+    write(
+        &explicit,
+        "extend = \"sloperator.toml\"\n[metrics]\nmin_words = 400\n",
+    );
+    let mut r = Resolver::new(CliOverrides::default(), Some(&explicit)).unwrap();
+    assert_eq!(
+        r.run_floors(&root.join("sub/deep")).unwrap(),
+        Floors {
+            sentences: 10,
+            words: 400
+        }
+    );
+}
+
+#[test]
+fn rejects_negative_threshold() {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("sloperator.toml");
+    for (value, reason) in [
+        ("-1", "minimum is 0"),
+        ("nan", "NaN"),
+        ("inf", "maximum"),
+        ("-inf", "minimum"),
+    ] {
+        write(
+            &path,
+            &format!("[rules.SLP014]\nmax_per_1000_words = {value}\n"),
+        );
+        let (file, key, message) = config_error(&path);
+        assert_eq!(file, canon(&path));
+        assert_eq!(key, "rules.SLP014.max_per_1000_words");
+        assert!(message.contains(reason), "{message}");
+    }
+}
+
+#[test]
+fn existing_params_still_load() {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("sloperator.toml");
+    for value in [0.0, 1.0, f64::MAX] {
+        write(
+            &path,
+            &format!(
+                "[rules.SLP005]\nmax_per_1000_words = {value:?}\n[ rules.SLP010 ]\nmin_items = {value:?}\nmax_words = {value:?}\n[rules.SLP011]\nmax_per_100_words = {value:?}\n[rules.SLP014]\nmax_per_1000_words = {value:?}\n"
+            ),
+        );
+        let mut resolver = Resolver::new(CliOverrides::default(), Some(&path)).unwrap();
+        let settings = resolver.for_file(&tmp.path().join("doc.md")).unwrap();
+        for code in [5, 10, 11, 14] {
+            assert!(
+                settings.rules[&RuleCode(code)]
+                    .params
+                    .values()
+                    .all(|v| *v == value)
+            );
+        }
+    }
+}
+
+#[test]
+fn rejects_param_below_minimum() {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("sloperator.toml");
+    for (name, value) in [("min_sentences", "0"), ("max_grade", "-1")] {
+        write(&path, &format!("[rules.SLP018]\n{name} = {value}\n"));
+        let (file, key, reason) = config_error(&path);
+        assert_eq!(file, canon(&path));
+        assert_eq!(key, format!("rules.SLP018.{name}"));
+        assert!(reason.contains("minimum"), "{reason}");
+    }
+}
+
+#[test]
+fn rejects_param_above_maximum() {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("sloperator.toml");
+    write(&path, "[rules.SLP018]\nmax_grade = 31\n");
+    let (_, key, reason) = config_error(&path);
+    assert_eq!(key, "rules.SLP018.max_grade");
+    assert!(reason.contains("30"), "{reason}");
+    write(&path, "[rules.SLP021]\nmin_ttr = 2\n");
+    let (_, key, reason) = config_error(&path);
+    assert_eq!(key, "rules.SLP021.min_ttr");
+    assert!(reason.contains("maximum is 1"), "{reason}");
+}
+
+#[test]
+fn metric_rule_minimums_follow_report_floors() {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("sloperator.toml");
+    let text = "select = [\"SLP018\"]\n[metrics]\nmin_sentences = 10\nmin_words = 200\n";
+    write(&path, text);
+    let mut r = Resolver::new(CliOverrides::default(), Some(&path)).unwrap();
+    let s = r.for_file(&tmp.path().join("doc.md")).unwrap();
+    assert_eq!(s.rules[&RuleCode(18)].params["min_sentences"], 10.0);
+    assert_eq!(s.rules[&RuleCode(18)].params["min_words"], 200.0);
+    for (name, value, floor) in [("min_sentences", 6, 10), ("min_words", 150, 200)] {
+        write(&path, &format!("{text}[rules.SLP018]\n{name} = {value}\n"));
+        let (_, key, reason) = config_error(&path);
+        assert_eq!(key, format!("rules.SLP018.{name}"));
+        assert!(reason.contains(&floor.to_string()), "{reason}");
+    }
+    // Valid per-file overrides apply after the report floors; lower ones fail when that file resolves.
+    write(
+        &path,
+        &format!(
+            "{text}[[per_file]]\nglob = \"doc.md\"\n[per_file.rules.SLP018]\nmin_sentences = 12\n"
+        ),
+    );
+    let mut r = Resolver::new(CliOverrides::default(), Some(&path)).unwrap();
+    assert_eq!(
+        r.for_file(&tmp.path().join("doc.md")).unwrap().rules[&RuleCode(18)].params["min_sentences"],
+        12.0
+    );
+    write(
+        &path,
+        &format!(
+            "{text}[[per_file]]\nglob = \"doc.md\"\n[per_file.rules.SLP018]\nmin_sentences = 6\n"
+        ),
+    );
+    let mut r = Resolver::new(CliOverrides::default(), Some(&path)).unwrap();
+    match r.for_file(&tmp.path().join("doc.md")) {
+        Err(Error::Config { file, key, reason }) => {
+            assert_eq!(file, canon(&path));
+            assert_eq!(key, "rules.SLP018.min_sentences");
+            assert!(reason.contains("10"));
+        }
+        other => panic!("expected floor error, got {other:?}"),
+    }
+    // A later chain layer can raise the report floor; origin points to the earlier rule param.
+    write(
+        &path,
+        "select = [\"SLP018\"]\n[rules.SLP018]\nmin_sentences = 6\n",
+    );
+    let child = tmp.path().join("child.toml");
+    write(
+        &child,
+        "extend = \"sloperator.toml\"\n[metrics]\nmin_sentences = 10\n",
+    );
+    let (file, key, _) = config_error(&child);
+    assert_eq!(file, canon(&path));
+    assert_eq!(key, "rules.SLP018.min_sentences");
 }

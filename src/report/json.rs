@@ -9,6 +9,7 @@ use super::{FileView, Summary, rule_info};
 use crate::rules::registry::Registry;
 use crate::rules::{FixClass, RuleCode, Severity};
 use crate::score::Score;
+use crate::text::Metrics;
 
 /// The JSON schema version; bump it on any breaking change to the shape.
 pub(super) const SCHEMA_VERSION: u32 = 1;
@@ -28,6 +29,8 @@ struct File<'a> {
     path: &'a str,
     score: Score,
     score_before: Option<Score>,
+    metrics: Metrics,
+    metrics_before: Option<Metrics>,
     findings: Vec<Finding<'a>>,
 }
 
@@ -86,6 +89,7 @@ pub(super) fn render(
                         message: &l.finding.message,
                         matched: &l.matched,
                         // A safe fix exists when the rule attached one; a model fix whenever the rule is model-class.
+                        // Safe-class findings without a fix may still be rewritten by the model.
                         fix: Fix {
                             available: match class {
                                 FixClass::Safe => l.finding.fix.is_some(),
@@ -101,6 +105,12 @@ pub(super) fn render(
                 path: &f.path,
                 score: f.result.score,
                 score_before: f.result.score_before,
+                metrics: f.result.metrics.derive(&f.result.floors),
+                metrics_before: f
+                    .result
+                    .metrics_before
+                    .as_ref()
+                    .map(|c| c.derive(&f.result.floors)),
                 findings,
             })
         })

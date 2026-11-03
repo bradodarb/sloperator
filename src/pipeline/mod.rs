@@ -3,6 +3,8 @@
 //! `pipeline` never uses `cli`, `report`, `write` or `engine::runtime` (layering). `lint` takes no rewriter, so it
 //! cannot reach the model (FR-2.1, D-3). `fix` runs the rules engine's safe fixes (step 1), then the model windows
 //! (step 2), then the whole-document check (step 3) and the report and scores (step 4).
+//! Results retain paragraph counts and file-specific floors. Fix/Diff pairs original counts with counts from
+//! the surviving document pass, including the original when whole-document verification rejects the edits.
 
 use std::ops::Range;
 use std::sync::Arc;
@@ -13,6 +15,7 @@ use crate::engine::window::{Window, WindowPlan, windows};
 use crate::input::{Origin, Source};
 use crate::rules::registry::Registry;
 use crate::rules::{Finding, RuleCode, Severity};
+use crate::text::{Counts, Floors, Prose};
 use crate::verify::{self, Check, Rejection, Verified};
 use crate::{directives, edit, engine, rules, score};
 
@@ -34,6 +37,7 @@ pub struct Engines {
 pub struct Analysis {
     pub source: Source,
     pub doc: Document,
+    pub prose: Prose,
     pub sup: directives::Suppressions,
     pub findings: Vec<Finding>,
 }
@@ -60,6 +64,12 @@ pub struct FileResult {
     pub score_before: Option<score::Score>,
     /// The final text; Fix/Diff only, and only when it differs from the original.
     pub fixed: Option<String>,
+    /// Paragraph metric counts of the final text.
+    pub metrics: Counts,
+    /// Paragraph metric counts of the original text; Fix/Diff only.
+    pub metrics_before: Option<Counts>,
+    /// Sample floors resolved for this file.
+    pub floors: Floors,
 }
 
 /// Parses the source, extracts its directives and runs the enabled rules. Pure and safe to run in parallel (ADR-09).
@@ -67,10 +77,11 @@ pub struct FileResult {
 /// # Errors
 /// `Error::UnknownRule` or `Error::Directive` from a bad directive (FR-6.5).
 pub fn analyse(source: Source) -> Result<Analysis, Error> {
-    let (doc, sup, findings) = detect_in(Arc::clone(&source.text), &source)?;
+    let (doc, prose, sup, findings) = detect_in(Arc::clone(&source.text), &source)?;
     Ok(Analysis {
         source,
         doc,
+        prose,
         sup,
         findings,
     })
@@ -88,6 +99,9 @@ pub fn lint(a: Analysis) -> FileResult {
         score,
         score_before: None,
         fixed: None,
+        metrics: a.prose.counts(&a.doc).clone(),
+        metrics_before: None,
+        floors: a.source.settings.metrics,
     }
 }
 
@@ -104,6 +118,8 @@ pub fn fix(
 ) -> Result<FileResult, Error> {
     let min = a.source.settings.min_severity;
     let doc0 = a.doc;
+    let prose0 = a.prose;
+    let metrics_before = prose0.counts(&doc0).clone();
     let findings0 = a.findings;
     let score_before = score::score(&reported(findings0.clone(), min), doc0.prose_words());
     // Rejections, with ranges in the original text, and the verified edits that produced the fixed text.
@@ -115,7 +131,7 @@ pub fn fix(
         let proposals: Vec<_> = findings0.iter().filter_map(|f| f.fix.clone()).collect();
         let frozen = a.sup.frozen_ranges();
         for p in edit::plan(proposals, frozen).kept {
-            match verify::edit(&doc0, p, frozen, &a.source.settings.protect) {
+            match verify::edit(&doc0, p, frozen, &a.source.settings.protect, &[]) {
                 Ok(v) => applied.push(v),
                 Err(r) => rejected.push(r),
             }
@@ -143,12 +159,13 @@ pub fn fix(
     // findings. The findings it adds (SLP901/902) are placed in the step-2 text.
     let step2 = match (engines.model, rw) {
         (true, Some(rw)) => {
-            let (base, base_sup, base_findings) = match &step1 {
-                Some((d, s, f)) => (d, s, f.as_slice()),
-                None => (&doc0, &a.sup, findings0.as_slice()),
+            let (base, base_prose, base_sup, base_findings) = match &step1 {
+                Some((d, p, s, f)) => (d, p, s, f.as_slice()),
+                None => (&doc0, &prose0, &a.sup, findings0.as_slice()),
             };
             let m = model_windows(
                 base,
+                base_prose,
                 base_sup.frozen_ranges(),
                 base_findings,
                 &a.source,
@@ -160,24 +177,25 @@ pub fn fix(
             }
             system.extend(m.system);
             if m.applied.is_empty() {
-                step1.map(|(d, _, f)| (d, f))
+                step1.map(|(d, p, _, f)| (d, p, f))
             } else {
                 let text2: Arc<str> = edit::apply(&base.src, &m.applied, base.newline).into();
-                let (d, _, f) = detect_in(text2, &a.source)?;
-                Some((d, f))
+                let (d, p, _, f) = detect_in(text2, &a.source)?;
+                Some((d, p, f))
             }
         }
-        _ => step1.map(|(d, _, f)| (d, f)),
+        _ => step1.map(|(d, p, _, f)| (d, p, f)),
     };
 
     // Step 3: whole-document check. A failure discards every edit and reports one SLP901 (architecture §7.2).
-    let (final_doc, final_findings, system) = match step2 {
-        None => (doc0, findings0, system),
-        Some((d, f)) => match verify::document(&doc0, &d) {
-            Ok(()) => (d, f, system),
-            Err(r) => (doc0, findings0, vec![rejection(r)]),
+    let (final_doc, final_prose, final_findings, system) = match step2 {
+        None => (doc0, prose0, findings0, system),
+        Some((d, p, f)) => match verify::document(&doc0, &d) {
+            Ok(()) => (d, p, f, system),
+            Err(r) => (doc0, prose0, findings0, vec![rejection(r)]),
         },
     };
+    let metrics = final_prose.counts(&final_doc).clone();
     let fixed = (final_doc.src != a.source.text).then(|| final_doc.src.to_string());
 
     // Step 4: report the findings left in the final text that pass --min-severity, plus every SLP9xx.
@@ -192,6 +210,9 @@ pub fn fix(
         score,
         score_before: Some(score_before),
         fixed,
+        metrics,
+        metrics_before: Some(metrics_before),
+        floors: a.source.settings.metrics,
     })
 }
 
@@ -211,6 +232,7 @@ struct ModelStep {
 /// A model load or runtime error (FR-9.7), or a bad directive in a candidate text.
 fn model_windows(
     doc: &Document,
+    prose: &Prose,
     frozen: &[Range<usize>],
     findings: &[Finding],
     source: &Source,
@@ -224,7 +246,12 @@ fn model_windows(
     };
     // The end of the last window sent: a window that overlaps it (a sentence window over two sentences) is skipped.
     let mut sent_to = 0;
-    for plan in windows(doc, findings, frozen, s) {
+    #[cfg(test)]
+    let scans0 = crate::text::segment::scans();
+    let plans = windows(doc, prose, findings, frozen, s);
+    #[cfg(test)]
+    PLAN_SCANS.with(|p| p.borrow_mut().push(crate::text::segment::scans() - scans0));
+    for plan in plans {
         let w = match plan {
             WindowPlan::Rewrite(w) if w.range.start >= sent_to => w,
             WindowPlan::Rewrite(w) => {
@@ -270,7 +297,7 @@ fn accept(
     source: &Source,
 ) -> Result<Result<Verified<edit::Proposal>, Rejection>, Error> {
     let verified = match engine::mask::propose(doc, w, raw, profile)
-        .and_then(|p| verify::edit(doc, p, frozen, &source.settings.protect))
+        .and_then(|p| verify::edit(doc, p, frozen, &source.settings.protect, &w.codes))
     {
         Ok(v) => v,
         Err(r) => return Ok(Err(r)),
@@ -280,7 +307,7 @@ fn accept(
     // The rewritten window in the candidate: `apply` may have normalised the replacement's line endings.
     let start = verified.get().range.start;
     let new_range = start..candidate.len() - (doc.src.len() - verified.get().range.end);
-    let (_, _, after) = detect_in(candidate, source)?;
+    let (_, _, _, after) = detect_in(candidate, source)?;
     let weight_after = after
         .iter()
         .filter(|f| {
@@ -291,11 +318,10 @@ fn accept(
     Ok(verify::improvement(w.weight_before, weight_after, w.range.clone()).map(|()| verified))
 }
 
+type Detected = (Document, Prose, directives::Suppressions, Vec<Finding>);
+
 /// Parse, extract directives and detect over `text` with the settings of `source`.
-fn detect_in(
-    text: Arc<str>,
-    source: &Source,
-) -> Result<(Document, directives::Suppressions, Vec<Finding>), Error> {
+fn detect_in(text: Arc<str>, source: &Source) -> Result<Detected, Error> {
     let s = &source.settings;
     let mut d = doc::parse(text, source.format, &s.protect);
     let path = match &source.origin {
@@ -304,8 +330,20 @@ fn detect_in(
     };
     let reg = Registry::builtin();
     let sup = directives::extract(&mut d, &path, reg)?;
-    let findings = rules::detect(&d, &sup, &s.enabled(reg));
-    Ok((d, sup, findings))
+    #[cfg(test)]
+    let scans0 = crate::text::segment::scans();
+    let prose = Prose::new(&d);
+    let findings = rules::detect(&d, &prose, &sup, &s.enabled(reg));
+    #[cfg(test)]
+    PASSES.with(|p| {
+        p.borrow_mut().push(Pass {
+            text: Arc::clone(&d.src),
+            blocks: d.blocks.len(),
+            scans: crate::text::segment::scans() - scans0,
+            tag_runs: prose.tag_runs.load(Ordering::Relaxed),
+        });
+    });
+    Ok((d, prose, sup, findings))
 }
 
 /// The findings that pass `--min-severity`. System findings always pass (DQ-4).
@@ -340,6 +378,9 @@ fn check_name(c: Check) -> &'static str {
         Check::OutputContract => "outputContract",
         Check::NoImprovement => "noImprovement",
         Check::Document => "document",
+        Check::Negation => "negation",
+        Check::ProperNouns => "properNouns",
+        Check::Modals => "modals",
     }
 }
 
@@ -377,4 +418,131 @@ fn locate(d: &Document, findings: Vec<Finding>) -> Vec<Located> {
             }
         })
         .collect()
+}
+
+#[cfg(test)]
+use std::cell::RefCell;
+#[cfg(test)]
+use std::sync::atomic::Ordering;
+
+/// One detection pass, as `detect_in` saw it (NFR-2 test hook).
+#[cfg(test)]
+struct Pass {
+    text: Arc<str>,
+    blocks: usize,
+    scans: u32,
+    tag_runs: u32,
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Every detection pass this thread ran, in order.
+    static PASSES: RefCell<Vec<Pass>> = const { RefCell::new(Vec::new()) };
+    /// The block scans each `windows` call in `model_windows` ran.
+    static PLAN_SCANS: RefCell<Vec<u32>> = const { RefCell::new(Vec::new()) };
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use super::*;
+    use crate::config::{CliOverrides, ModelSettings, Resolver, WindowMode};
+    use crate::input::Format;
+    use crate::model::ResolvedModel;
+
+    /// Rewrites each sentence window's tell to plain wording, so every window improves and is applied.
+    struct Plain;
+    impl engine::Rewriter for Plain {
+        fn rewrite(&mut self, req: &engine::RewriteRequest<'_>) -> Result<String, Error> {
+            Ok(req
+                .window
+                .replace("plays a crucial role in", "helps")
+                .replace("plays a vital role in", "helps")
+                .replace("plays a pivotal role in", "helps")
+                .replace("serves as", "is"))
+        }
+    }
+    struct PlainFactory;
+    impl engine::RewriterFactory for PlainFactory {
+        fn open(&self, _: &ResolvedModel) -> Result<Box<dyn engine::Rewriter>, Error> {
+            Ok(Box::new(Plain))
+        }
+    }
+
+    /// NFR-2 / FR-7.3 (Gap 9): a sentence-mode fix with three windows in one paragraph. Each document pass — the
+    /// original, each candidate parsed for the improvement check, the final text — builds one `Prose`: it scans
+    /// each block once and tags at most once. Window planning scans nothing. The tool sentence (an SLP006 hit the
+    /// tagger declines, so a fix-less Safe finding) makes the original pass tag once; the final text has no
+    /// candidate left and is never tagged.
+    #[test]
+    fn multi_window_fix_analyses_each_pass_once() {
+        PASSES.with(|p| p.borrow_mut().clear());
+        PLAN_SCANS.with(|p| p.borrow_mut().clear());
+        let tmp = tempfile::tempdir().unwrap();
+        let model = tmp.path().join("model.gguf");
+        std::fs::write(&model, b"not a real model").unwrap();
+        let path = tmp.path().join("doc.md");
+        let mut settings = (*Resolver::new(CliOverrides::default(), None)
+            .unwrap()
+            .for_file(&path)
+            .unwrap())
+        .clone();
+        settings.model.window = WindowMode::Sentence;
+        let ms = ModelSettings {
+            path: Some(model),
+            profile: Some("qwen3".into()),
+            ..settings.model.clone()
+        };
+        let text = "The cache plays a crucial role in builds and plays a vital role in tests. The index plays a \
+                    pivotal role in search and plays a crucial role in ranking. The tool serves as a bridge.\n";
+        let source = Source {
+            origin: Origin::File(path),
+            format: Format::Markdown,
+            text: Arc::from(text),
+            settings: Arc::new(settings),
+        };
+        let factory = PlainFactory;
+        let mut rw = engine::LazyRewriter::new(&factory, &ms).unwrap();
+        let both = Engines {
+            rules: true,
+            model: true,
+        };
+        let r = fix(
+            analyse(source).unwrap(),
+            both,
+            Some(&mut rw),
+            engine::DEFAULT_SEED,
+        )
+        .unwrap();
+        assert!(r.fixed.is_some(), "{:?}", r.findings);
+
+        let passes = PASSES.with(|p| p.take());
+        let plans = PLAN_SCANS.with(|p| p.take());
+        assert_eq!(plans, vec![0], "window planning rescanned a block");
+        // The original pass, three candidates and the final text: no step-1 pass (no safe fix applies).
+        assert_eq!(
+            passes.len(),
+            5,
+            "passes: {:?}",
+            passes.iter().map(|p| &*p.text).collect::<Vec<_>>()
+        );
+        assert_eq!(&*passes[0].text, text);
+        for p in &passes {
+            assert_eq!(
+                p.scans as usize, p.blocks,
+                "a pass scanned a block twice: {:?}",
+                p.text
+            );
+            assert!(p.tag_runs <= 1, "a pass tagged twice: {:?}", p.text);
+        }
+        assert_eq!(
+            passes[0].tag_runs, 1,
+            "the SLP006 hit must tag the original pass"
+        );
+        assert_eq!(
+            passes[4].tag_runs, 0,
+            "the final text has no candidate and must not be tagged"
+        );
+    }
 }

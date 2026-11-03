@@ -2,17 +2,17 @@
 //!
 //! A window is one prose block, or one sentence of it when `model.window = "sentence"`, that overlaps a finding the
 //! model may fix. A window that cannot be sent safely is a [`WindowPlan::Skip`], which the pipeline reports as SLP902.
-//! Nothing is ever skipped silently.
+//! Nothing is ever skipped silently. Each planned rewrite retains one code per overlapping non-system finding,
+//! including duplicates, in finding order; the same overlap filter computes its original weight.
 
 use std::ops::Range;
-
-use unicode_segmentation::UnicodeSegmentation;
 
 use super::mask;
 use crate::config::{Settings, WindowMode};
 use crate::doc::{BlockId, Document, Newline};
 use crate::rules::registry::Registry;
 use crate::rules::{Finding, FixClass, RuleCode, Severity};
+use crate::text::Prose;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Window {
@@ -27,6 +27,8 @@ pub struct Window {
     pub wrap: Option<Wrap>,
     /// Weighted findings overlapping `range` (FR-9.5), system codes excluded.
     pub weight_before: u32,
+    /// One code per overlapping non-system finding, in finding order; duplicates are retained.
+    pub codes: Vec<RuleCode>,
 }
 
 /// Line structure of a multi-line window (Gap 7). `prefix` is the container continuation text that every line after
@@ -74,6 +76,7 @@ impl WindowPlan {
 /// source order, one per distinct range.
 pub fn windows(
     doc: &Document,
+    prose: &Prose,
     findings: &[Finding],
     frozen: &[Range<usize>],
     s: &Settings,
@@ -84,7 +87,7 @@ pub fn windows(
             Some(b) => {
                 let range = match s.model.window {
                     WindowMode::Paragraph => doc.blocks[b.0 as usize].range.clone(),
-                    WindowMode::Sentence => sentence_range(doc, b, &f.range),
+                    WindowMode::Sentence => prose.segments().sentence_span(doc, b, &f.range),
                 };
                 (Some(b), range)
             }
@@ -159,7 +162,7 @@ fn plan(
         .collect();
     let prefixes: Vec<&str> = line_starts
         .iter()
-        .map(|&ls| &doc.src[ls..ls + mask::prefix_len(doc, ls, range.end)])
+        .map(|&ls| &doc.src[ls..ls + doc.continuation_prefix_len(ls, range.end)])
         .collect();
     if prefixes.windows(2).any(|p| p[0] != p[1]) {
         return skip(format!(
@@ -191,11 +194,15 @@ fn plan(
             indent,
         }
     });
-    let weight_before = findings
-        .iter()
-        .filter(|f| !f.code.is_system() && f.range.start < range.end && range.start < f.range.end)
+    let overlapping = || {
+        findings.iter().filter(|f| {
+            !f.code.is_system() && f.range.start < range.end && range.start < f.range.end
+        })
+    };
+    let weight_before = overlapping()
         .map(|f| crate::score::weight(f.severity))
         .sum();
+    let codes = overlapping().map(|f| f.code).collect();
     WindowPlan::Rewrite(Window {
         block,
         range,
@@ -203,6 +210,7 @@ fn plan(
         slots,
         wrap,
         weight_before,
+        codes,
     })
 }
 
@@ -217,7 +225,8 @@ fn measure(
     let src = &*doc.src;
     let block_start = doc.blocks[block.0 as usize].range.start;
     let first_line = src[..range.start].rfind('\n').map_or(0, |i| i + 1);
-    let content0 = (first_line + mask::prefix_len(doc, first_line, range.end)).max(block_start);
+    let content0 =
+        (first_line + doc.continuation_prefix_len(first_line, range.end)).max(block_start);
     let indent = src[content0.min(range.start)..range.start].chars().count();
     let line_width = |from: usize| {
         let end = src[from..].find('\n').map_or(src.len(), |i| from + i);
@@ -227,52 +236,63 @@ fn measure(
         .chain(
             line_starts
                 .iter()
-                .map(|&ls| line_width(ls + mask::prefix_len(doc, ls, range.end))),
+                .map(|&ls| line_width(ls + doc.continuation_prefix_len(ls, range.end))),
         )
         .max()
         .unwrap_or(0);
     (width.max(1), indent)
 }
 
-/// The sentences of `block` that `r` touches, as one source range with surrounding whitespace trimmed.
-///
-/// Sentences are found on a copy of the block in which line breaks and continuation prefixes are blanked (UAX #29
-/// breaks after every line feed otherwise). A boundary inside a protected run is not a boundary.
-fn sentence_range(doc: &Document, block: BlockId, r: &Range<usize>) -> Range<usize> {
-    let b = doc.blocks[block.0 as usize].range.clone();
-    let mut scan = doc.src.as_bytes()[b.clone()].to_vec();
-    for byte in scan.iter_mut().filter(|b| **b == b'\n' || **b == b'\r') {
-        *byte = b' ';
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+
+    use super::*;
+    use crate::config::{CliOverrides, Resolver};
+    use crate::doc::{self, Format, ProtectSettings};
+    use crate::text::segment::scans;
+
+    #[test]
+    fn planning_does_not_rescan() {
+        let doc = doc::parse(
+            "Delve and unlock. Leverage and elevate.".into(),
+            Format::Markdown,
+            &ProtectSettings::default(),
+        );
+        assert_eq!(doc.blocks.len(), 1);
+        let before = scans();
+        let prose = Prose::new(&doc);
+        assert_eq!(scans() - before, 1);
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("no-config-here/doc.md");
+        let mut settings = (*Resolver::new(CliOverrides::default(), None)
+            .unwrap()
+            .for_file(&path)
+            .unwrap())
+        .clone();
+        settings.model.window = WindowMode::Sentence;
+        let findings: Vec<_> = ["Delve", "unlock", "Leverage", "elevate"]
+            .into_iter()
+            .map(|word| {
+                let start = doc.src.find(word).unwrap();
+                Finding {
+                    code: RuleCode(2),
+                    range: start..start + word.len(),
+                    message: "test".into(),
+                    severity: Severity::Warning,
+                    fix: None,
+                }
+            })
+            .collect();
+        let before = scans();
+        let plans = windows(&doc, &prose, &findings, &[], &settings);
+        assert_eq!(scans(), before);
+        let ranges: Vec<_> = plans
+            .into_iter()
+            .map(|plan| match plan {
+                WindowPlan::Rewrite(w) => w.range,
+                WindowPlan::Skip { reason, .. } => panic!("unexpected skip: {reason}"),
+            })
+            .collect();
+        assert_eq!(ranges, vec![0..17, 18..39]);
     }
-    for (i, _) in doc.src[b.clone()].match_indices('\n') {
-        let ls = b.start + i + 1;
-        if ls < b.end {
-            let p = mask::prefix_len(doc, ls, b.end);
-            scan[ls - b.start..ls - b.start + p].fill(b' ');
-        }
-    }
-    // Only ASCII bytes were replaced with ASCII bytes, so the copy is still UTF-8.
-    let Ok(scan) = String::from_utf8(scan) else {
-        return b;
-    };
-    let mut starts: Vec<usize> = scan
-        .split_sentence_bound_indices()
-        .map(|(i, _)| i)
-        .filter(|&i| i == 0 || !doc.is_protected(&(b.start + i..b.start + i)))
-        .collect();
-    starts.push(scan.len());
-    let (lo, hi) = (
-        r.start.saturating_sub(b.start),
-        r.end.max(r.start + 1).saturating_sub(b.start),
-    );
-    let first = starts.partition_point(|&s| s <= lo).saturating_sub(1);
-    let last = starts.partition_point(|&s| s < hi).max(first + 1);
-    let (s, e) = (starts[first], starts[last.min(starts.len() - 1)]);
-    let piece = &scan[s..e];
-    let lead = piece.len() - piece.trim_start().len();
-    let trail = piece.len() - piece.trim_end().len();
-    if lead + trail >= piece.len() {
-        return b;
-    }
-    b.start + s + lead..b.start + e - trail
 }

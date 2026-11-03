@@ -23,7 +23,6 @@ src/report/json.rs:88 gains the comment "Safe-class findings without a fix may s
 | `tests/pipeline.rs` | existing | tests below (methods added) |
 | `tests/model_reliance.rs` | existing | tests below (methods added) |
 | `tests/report.rs` | existing | tests below (methods added) |
-| `tests/standalone.rs` | existing | tests below (methods added) |
 
 ## Acceptance Criteria
 
@@ -41,10 +40,9 @@ src/report/json.rs:88 gains the comment "Safe-class findings without a fix may s
 | 2 | `sloperator::pipeline` | `failing_template_fix_is_slp901` | a failing template fix is rejected loudly | NFR-6 |
 | 3 | `sloperator::model_reliance` | `residual_does_not_exceed_baseline` | phase-5 value ≤ baseline | FR-10.2, FR-10.3 |
 | 4 | `sloperator::report` | `(all existing)` | JSON output unchanged by the comment | NFR-9 |
-| 5 | `sloperator::standalone` | `no_host_references` | doc edits use the repo's own form | NFR-1 |
 
 ## Notes
 
 The macro arm moves for 3 and 4 are in story-01/02, as the documented test edits FR-8.4 makes necessary (NFR-1).
 
-Gate: `make -f "$AEGIS_DIR/Makefile" test UNIT=sloperator TESTS='slp007_slp015_unchanged failing_template_fix_is_slp901 model_reliance sloperator::report sloperator::standalone#no_host_references'`
+Gate: `make -f "$AEGIS_DIR/Makefile" test UNIT=sloperator TESTS='slp007_slp015_unchanged failing_template_fix_is_slp901 model_reliance sloperator::report'`

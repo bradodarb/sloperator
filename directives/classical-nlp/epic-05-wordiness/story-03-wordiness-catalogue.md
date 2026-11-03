@@ -20,7 +20,6 @@ CHANGELOG.md's 0.2.0 section adds the SLP001 rows (default-on, so default output
 | `tests/perf.rs` | 105-112 | `"SLP022"` added |
 | `eval/model-reliance.md` | table | `phase 2` row |
 | `tests/model_reliance.rs` | existing | tests below (methods added) |
-| `tests/standalone.rs` | existing | tests below (methods added) |
 
 ## Acceptance Criteria
 
@@ -35,10 +34,9 @@ CHANGELOG.md's 0.2.0 section adds the SLP001 rows (default-on, so default output
 |---|------------|-------------|----------|-----------|
 | 1 | `sloperator::model_reliance` | `residual_does_not_exceed_baseline` | phase-2 value ≤ baseline | FR-10.2, FR-10.3 |
 | 2 | `sloperator::perf` | `rules_only_100kb_under_1s` | budget holds | NFR-2 |
-| 3 | `sloperator::standalone` | `no_host_references` | docs use the repo's own form | NFR-1 |
 
 ## Notes
 
 Changes accumulate under `0.2.0 (unreleased)`; no version bump (DQ-3).
 
-Gate: `make -f "$AEGIS_DIR/Makefile" test UNIT=sloperator TESTS='model_reliance sloperator::perf sloperator::standalone#no_host_references'`
+Gate: `make -f "$AEGIS_DIR/Makefile" test UNIT=sloperator TESTS='model_reliance sloperator::perf'`

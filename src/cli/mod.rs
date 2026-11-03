@@ -226,7 +226,8 @@ fn check(
 
     // 9. The report goes to stderr when stdout carries content (DQ-11); `-q` prints errors only.
     if !ui.quiet {
-        let summary = Summary::of(&results, errors);
+        let floors = resolver.run_floors(&deps.cwd)?;
+        let summary = Summary::of(&results, errors, &floors);
         let rendered = if content_on_out {
             report::render(args.output_format, &results, &summary, false, err)
         } else {
@@ -317,7 +318,15 @@ fn show_rules(code: Option<&str>, out: &mut dyn Write) -> Result<ExitCode, Error
             if !m.params.is_empty() {
                 s.push_str("\nparameters:\n");
                 for p in m.params {
-                    s.push_str(&format!("  {} = {}  {}\n", p.name, p.default, p.help));
+                    let bounds = if p.max == f64::MAX {
+                        format!("(min {})", p.min)
+                    } else {
+                        format!("(min {}, max {})", p.min, p.max)
+                    };
+                    s.push_str(&format!(
+                        "  {} = {}  {} {}\n",
+                        p.name, p.default, p.help, bounds
+                    ));
                 }
             }
             s.push_str(&format!(

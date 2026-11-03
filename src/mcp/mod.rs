@@ -111,6 +111,7 @@ impl Server {
         let r = blocking(move || pipeline::analyse(source).map(pipeline::lint)).await?;
         Ok(json!({
             "score": r.score,
+            "metrics": r.metrics.derive(&r.floors),
             "findings": r.findings.iter().map(finding_json).collect::<Vec<_>>(),
         }))
     }
@@ -217,6 +218,8 @@ fn fix_json(r: &FileResult, as_path: &Path, model: bool) -> Value {
         "rejections": rejections.into_iter().map(finding_json).collect::<Vec<_>>(),
         "scoreBefore": r.score_before,
         "scoreAfter": r.score,
+        "metricsBefore": r.metrics_before.as_ref().map(|c| c.derive(&r.floors)),
+        "metricsAfter": r.metrics.derive(&r.floors),
         "engines": { "rules": true, "model": model },
     })
 }
@@ -256,6 +259,7 @@ fn explain_json(args: &JsonObject) -> Result<Value, String> {
         "explain": m.explain,
         "params": m.params.iter().map(|p| json!({
             "name": p.name, "default": p.default, "help": p.help,
+            "min": p.min, "max": if p.max == f64::MAX { None } else { Some(p.max) },
         })).collect::<Vec<_>>(),
         "example": { "before": m.example.0, "after": m.example.1 },
     }))

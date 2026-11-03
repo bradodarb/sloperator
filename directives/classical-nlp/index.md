@@ -10,7 +10,7 @@
 One line per epic, in delivery order (the architecture's phases 1a–6, locked by PRD D-1). Stories separated by spaces run in parallel; `|` starts the next wave.
 
 ```slice
-epic-01-sentence-seam: story-01-prd-host-reference story-02-model-reliance-baseline story-03-doc-prefix-and-to-text | story-04-text-segment-and-prose | story-05-wire-prose-through-detect-and-windows | story-06-layering-rows
+epic-01-sentence-seam: story-02-model-reliance-baseline story-03-doc-prefix-and-to-text | story-04-text-segment-and-prose | story-05-wire-prose-through-detect-and-windows | story-06-layering-rows
 epic-02-reading-metrics: story-01-syllable-counter | story-02-metric-counts-and-floors | story-03-metrics-config-table | story-04-pipeline-file-metrics | story-05-text-json-reports story-06-mcp-metrics
 epic-03-metric-rules: story-01-param-bounds | story-02-metric-rule-helpers | story-03-slp018-021-rules | story-04-metric-rules-catalogue
 epic-04-calibration-corpus: story-01-calibration-corpus
@@ -43,7 +43,7 @@ epic-09-redundancy: epic-06-verifier-invariants epic-08-template-fixes
 
 | Epic | Outcome | PRD Refs | Stories |
 |------|---------|----------|---------|
-| [epic-01-sentence-seam](./epic-01-sentence-seam.md) | Walking skeleton: the model-reliance baseline is recorded, and every `check`/`fix` builds one `Prose` per document pass. Rules and window planning read its cached segmentation, and behaviour is unchanged | FR-1, FR-10, NFR-1, NFR-2, NFR-5, NFR-7, NFR-8, NFR-9 | 6 |
+| [epic-01-sentence-seam](./epic-01-sentence-seam.md) | Walking skeleton: the model-reliance baseline is recorded, and every `check`/`fix` builds one `Prose` per document pass. Rules and window planning read its cached segmentation, and behaviour is unchanged | FR-1, FR-10, NFR-2, NFR-5, NFR-7, NFR-8, NFR-9 | 5 |
 | [epic-02-reading-metrics](./epic-02-reading-metrics.md) | Every text, JSON and MCP report shows reading metrics, with report floors configurable in `[metrics]` | FR-2, FR-3, NFR-3, NFR-5 | 6 |
 | [epic-03-metric-rules](./epic-03-metric-rules.md) | Default-off SLP018–SLP021 feed metrics into the score, with bounded params | FR-4, FR-11, NFR-4 | 4 |
 | [epic-04-calibration-corpus](./epic-04-calibration-corpus.md) | A public-domain corpus records the metric values beside the provisional thresholds | D-4 follow-up, FR-4.5 | 1 |
@@ -53,7 +53,7 @@ epic-09-redundancy: epic-06-verifier-invariants epic-08-template-fixes
 | [epic-08-template-fixes](./epic-08-template-fixes.md) | SLP003 and SLP004 become Safe and attach template fixes | FR-8, NFR-9 | 3 |
 | [epic-09-redundancy](./epic-09-redundancy.md) | Default-off SLP023 reports repeated sentences within a paragraph | FR-9, FR-10.3, NFR-2, NFR-5 | 4 |
 
-34 stories in total.
+33 stories in total (epic-01 story-01 is superseded; see below).
 
 ## Brad's decisions applied
 
@@ -65,20 +65,20 @@ From `decisions.md` (spec gate). Each is built as given, and no story reopens it
 | Gap 5 (OD-3) | (a) Report minimums are configurable and apply consistently, even with every metric rule off. A top-level `[metrics]` table (`min_sentences`, `min_words`, integers ≥ 1, defaults 5/100) goes into `Settings`. `Counts::derive` takes the floors. Each file's metrics use its own settings; `summary.metrics` uses the run's root config (the `--config` chain, else the nearest `sloperator.toml` up from the working directory, else defaults). Metric-rule minimums default to the configured floors and may not go below them | epic-02 story-02 to story-05; epic-03 story-02 |
 | Gap 11 (OD-2) | (a) Only rule-origin edits skip capitalised common words; model rewrites get FR-6.2's literal proxy | epic-06 story-01, story-03 |
 
-## Open question for Brad
+## Resolved: planning files versus the standalone scan
 
-**Planning files versus the standalone scan.** `tests/standalone.rs::no_host_references` scans every file in the
-repository except `.git` and `target` (tests/standalone.rs:37). Among its markers are the host's name and `UNIT=`
-(:15-28). This `directives/` tree is tracked on the feature branch, and every story's mandated gate line contains
-both markers. So the test fails as soon as these files exist, and on `main` too if they land there. SPEC §1 found only
-the PRD line.
+The open question (keep `directives/` out of `standalone::no_host_references`, or strip it at landing) is moot: PR #10
+(`chore/drop-host-reference-scan`, merged into this branch at 33af7a3) removed the host-reference scan. So
+epic-01 story-01 (`story-01-prd-host-reference`) is **superseded**: it is out of the slice above, and its file stays,
+marked superseded, for history. The `sloperator::standalone#no_host_references` selector and Test Cases rows are gone
+from every other story's gate, because that test no longer exists. No acceptance criterion about behaviour changed.
 
-- **(a)** Add `directives` to `NOT_SCANNED`, so planning artifacts are not scanned as shipped content. Simple, and the
-  scan still covers `src/`, `tests/`, `docs/`, `eval/` and `fixtures/`.
-- **(b)** Keep the scan whole, and have the landing remove `directives/` from the branch before it merges.
+## Grouped delivery
 
-Recommendation: **(a)**. It needs no change to the delivery workflow, and the planning tree is not product content.
-epic-01 story-01 is written for (a), and its Notes say what changes under (b).
+`grouped-delivery.json` (next to this index) is the seed for the grouped-delivery workflow: 11 groups in 9 waves,
+validated by `group-plan.py`. Each story belongs whole (code, docs, tests) to one group. Groups in one wave
+touch disjoint files and pass their gates on the wave's base, so merge order does not matter. The epic chain
+above (D-1) is kept unchanged.
 
 ## Deferred items (from `deferred.md`)
 

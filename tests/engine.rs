@@ -8,6 +8,8 @@ mod common;
 use std::path::Path;
 use std::sync::Arc;
 
+use sloperator::text::Prose;
+
 use common::FakeRewriter;
 use sloperator::config::{CliOverrides, Resolver, Settings, WindowMode};
 use sloperator::doc::{self, Document, Format, ProtectSettings};
@@ -67,8 +69,9 @@ fn rewrite_plans(plans: &[WindowPlan]) -> Vec<&Window> {
 
 /// The one window of a paragraph with a model-class finding on `needle`.
 fn window_of(d: &Document, needle: &str) -> Window {
+    let prose = Prose::new(d);
     let f = finding(d, needle, AI_VOCAB, Severity::Warning);
-    let plans = windows(d, &[f], &[], &settings());
+    let plans = windows(d, &prose, &[f], &[], &settings());
     let ws = rewrite_plans(&plans);
     assert_eq!(ws.len(), 1);
     ws[0].clone()
@@ -119,6 +122,7 @@ fn windows_only_for_findings_at_or_above_min_severity() {
     let d = parse(
         "We delve into the cache.\n\nThe tapestry of options is rich.\n\nWe utilize the tool.\n\nPlain closing words.\n",
     );
+    let prose = Prose::new(&d);
     let p = |i: usize| d.blocks[i].range.clone();
     let mut safe_with_fix = finding(&d, "tapestry", REPLACEABLE, Severity::Error);
     safe_with_fix.fix = Some(Proposal {
@@ -134,7 +138,7 @@ fn windows_only_for_findings_at_or_above_min_severity() {
     ];
     let mut s = settings();
     assert_eq!(s.min_severity, Severity::Warning);
-    let plans = windows(&d, &findings, &[], &s);
+    let plans = windows(&d, &prose, &findings, &[], &s);
     let ranges: Vec<_> = rewrite_plans(&plans)
         .iter()
         .map(|w| w.range.clone())
@@ -142,7 +146,7 @@ fn windows_only_for_findings_at_or_above_min_severity() {
     assert_eq!(ranges, vec![p(0), p(2)]);
 
     s.min_severity = Severity::Suggestion;
-    let plans = windows(&d, &findings, &[], &s);
+    let plans = windows(&d, &prose, &findings, &[], &s);
     let ranges: Vec<_> = rewrite_plans(&plans)
         .iter()
         .map(|w| w.range.clone())
@@ -159,8 +163,9 @@ fn windows_only_for_findings_at_or_above_min_severity() {
 #[test]
 fn none_class_selects_no_window() {
     let d = parse("- one\n- two\n- three\n- four\n- five\n");
+    let prose = Prose::new(&d);
     let f = finding(&d, "one", BULLET_SPAM, Severity::Error);
-    assert!(windows(&d, &[f], &[], &settings()).is_empty());
+    assert!(windows(&d, &prose, &[f], &[], &settings()).is_empty());
 }
 
 #[test]
@@ -244,26 +249,31 @@ fn placeholder_dropped_or_duplicated_rejected() {
 #[test]
 fn input_with_placeholder_glyph_skipped_slp902() {
     let d = parse("The notation ⟦x⟧ shows a delve into sets.\n");
+    let prose = Prose::new(&d);
     let f = finding(&d, "delve", AI_VOCAB, Severity::Warning);
-    let plans = windows(&d, &[f], &[], &settings());
+    let plans = windows(&d, &prose, &[f], &[], &settings());
     assert!(skip_reason(&plans).contains("placeholder glyph"));
     let d = parse("A lone ⟧ glyph and a delve.\n");
+    let prose = Prose::new(&d);
     let f = finding(&d, "delve", AI_VOCAB, Severity::Warning);
-    assert!(skip_reason(&windows(&d, &[f], &[], &settings())).contains("placeholder glyph"));
+    assert!(
+        skip_reason(&windows(&d, &prose, &[f], &[], &settings())).contains("placeholder glyph")
+    );
 }
 
 #[test]
 fn over_long_window_skipped_slp902() {
     let d = parse("We delve into a long passage that keeps going on and on.\n");
+    let prose = Prose::new(&d);
     let f = finding(&d, "delve", AI_VOCAB, Severity::Warning);
     let mut s = settings();
     assert_eq!(s.model.max_window_chars, 4000);
     assert_eq!(
-        rewrite_plans(&windows(&d, std::slice::from_ref(&f), &[], &s)).len(),
+        rewrite_plans(&windows(&d, &prose, std::slice::from_ref(&f), &[], &s)).len(),
         1
     );
     s.model.max_window_chars = 20;
-    let reason = skip_reason(&windows(&d, &[f], &[], &s));
+    let reason = skip_reason(&windows(&d, &prose, &[f], &[], &s));
     assert!(reason.contains("max_window_chars = 20"), "{reason}");
 }
 
@@ -350,8 +360,9 @@ fn inconsistent_prefix_window_skipped_slp902() {
         "- We delve into the cache\n   indented by three\n    indented by four.\n",
     ] {
         let d = parse(src);
+        let prose = Prose::new(&d);
         let f = finding(&d, "delve", AI_VOCAB, Severity::Warning);
-        let reason = skip_reason(&windows(&d, &[f], &[], &settings()));
+        let reason = skip_reason(&windows(&d, &prose, &[f], &[], &settings()));
         assert!(
             reason.contains("inconsistent container prefix"),
             "{src:?}: {reason}"
@@ -373,10 +384,11 @@ fn max_tokens_from_setting_or_window_length() {
 fn sentence_mode_windows_the_finding_sentence() {
     let src = "> First we set up `x` here. Then we delve into the\n> cache layer, e.g. `y` too. Last words.\n";
     let d = parse(src);
+    let prose = Prose::new(&d);
     let f = finding(&d, "delve", AI_VOCAB, Severity::Warning);
     let mut s = settings();
     s.model.window = WindowMode::Sentence;
-    let plans = windows(&d, &[f], &[], &s);
+    let plans = windows(&d, &prose, &[f], &[], &s);
     let w = rewrite_plans(&plans)[0];
     assert_eq!(
         w.masked,
@@ -647,4 +659,54 @@ fn seed_passed_through_same_for_every_window() {
     );
     let seeds: Vec<u32> = factory.calls.borrow().iter().map(|(_, s)| *s).collect();
     assert_eq!(seeds, vec![1234; 3]);
+}
+
+#[test]
+fn metric_finding_never_selects_window() {
+    let d = parse(&std::fs::read_to_string(common::fixture("rules/SLP018/positive.md")).unwrap());
+    let prose = Prose::new(&d);
+    let mut s = settings();
+    s.min_severity = Severity::Suggestion;
+    let rule = sloperator::rules::registry::Registry::builtin()
+        .get(RuleCode(18))
+        .unwrap();
+    let enabled = sloperator::rules::Enabled {
+        rule,
+        severity: Severity::Suggestion,
+        params: rule
+            .meta()
+            .params
+            .iter()
+            .map(|p| (p.name, p.default))
+            .collect(),
+    };
+    let findings = sloperator::rules::detect(
+        &d,
+        &prose,
+        &sloperator::directives::Suppressions::default(),
+        &[enabled],
+    );
+    assert_eq!(findings.len(), 1);
+    assert_eq!(findings[0].code, RuleCode(18));
+    assert!(windows(&d, &prose, &findings, &[], &s).is_empty());
+}
+
+#[test]
+fn window_codes_one_per_finding() {
+    let d = parse("It is not red but blue, not slow but fast.\n\nOther paragraph.\n");
+    let prose = Prose::new(&d);
+    let findings = [
+        finding(&d, "red", RuleCode(3), Severity::Warning),
+        finding(&d, "blue", RuleCode::REWRITE_REJECTED, Severity::Error),
+        finding(&d, "slow", RuleCode(3), Severity::Warning),
+        finding(&d, "fast", RuleCode(2), Severity::Suggestion),
+        finding(&d, "Other", RuleCode(3), Severity::Warning),
+    ];
+    let plans = windows(&d, &prose, &findings, &[], &settings());
+    let ws = rewrite_plans(&plans);
+    assert_eq!(ws.len(), 2);
+    assert_eq!(ws[0].codes, [RuleCode(3), RuleCode(3), RuleCode(2)]);
+    assert_eq!(ws[0].weight_before, 7);
+    assert_eq!(ws[1].codes, [RuleCode(3)]);
+    assert_eq!(ws[1].weight_before, 3);
 }

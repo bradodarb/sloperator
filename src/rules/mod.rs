@@ -8,6 +8,7 @@ use std::ops::Range;
 
 use crate::doc::{BlockText, Document};
 
+use crate::text::Prose;
 use crate::types::ProposalOrigin;
 pub use crate::types::{Proposal, RuleCode}; // re-exported so callers keep writing `rules::RuleCode` (Gap 3)
 
@@ -55,6 +56,9 @@ pub enum Family {
     Markup,
     ChatbotResidue,
     EmDash,
+    Readability,
+    Wordiness,
+    Redundancy,
 }
 
 /// One tunable threshold (e.g. SLP014 `max_per_1000_words`); config validates names and types against these (FR-7.6).
@@ -62,6 +66,10 @@ pub enum Family {
 pub struct ParamSpec {
     pub name: &'static str,
     pub default: f64,
+    /// Inclusive minimum accepted by config.
+    pub min: f64,
+    /// Inclusive maximum; `f64::MAX` denotes an unbounded upper limit.
+    pub max: f64,
     pub help: &'static str,
 }
 
@@ -83,6 +91,7 @@ pub struct RuleMeta {
 /// What a rule sees: prose only (FR-4.4), its resolved params, the prose word count (FR-4.3).
 pub struct RuleCtx<'a> {
     pub doc: &'a Document,
+    pub prose: &'a Prose,
     pub params: &'a BTreeMap<&'static str, f64>,
     pub severity: Severity,
 }
@@ -143,7 +152,7 @@ pub trait Rule: Send + Sync {
 }
 
 /// The rule-set version (architecture §6): the crate version at which the default list last changed.
-pub const RULE_SET_VERSION: &str = "0.1.0";
+pub const RULE_SET_VERSION: &str = "0.2.0";
 
 /// A rule with its resolved severity and params for one file (built by `config::Settings::enabled`, SPEC §13).
 pub struct Enabled<'a> {
@@ -157,6 +166,7 @@ pub struct Enabled<'a> {
 /// never suppressed (`Suppressions::is_suppressed`).
 pub fn detect(
     doc: &Document,
+    prose: &Prose,
     sup: &crate::directives::Suppressions,
     rules: &[Enabled<'_>],
 ) -> Vec<Finding> {
@@ -164,6 +174,7 @@ pub fn detect(
     for enabled in rules {
         let ctx = RuleCtx {
             doc,
+            prose,
             params: &enabled.params,
             severity: enabled.severity,
         };
@@ -174,4 +185,59 @@ pub fn detect(
     });
     out.sort_by_key(|f| (f.range.start, f.code));
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::registry::Registry;
+    use super::*;
+    use crate::directives::Suppressions;
+    use crate::doc::{self, Format, ProtectSettings};
+    use std::sync::Arc;
+    use std::sync::atomic::Ordering;
+
+    fn enabled(code: u16) -> Enabled<'static> {
+        let rule = Registry::builtin()
+            .get(RuleCode(code))
+            .unwrap_or_else(|| panic!("SLP{code:03}"));
+        Enabled {
+            rule,
+            severity: rule.meta().severity,
+            params: rule
+                .meta()
+                .params
+                .iter()
+                .map(|p| (p.name, p.default))
+                .collect(),
+        }
+    }
+
+    fn runs(src: &str) -> u32 {
+        let d = doc::parse(
+            Arc::from(src),
+            Format::Markdown,
+            &ProtectSettings::default(),
+        );
+        let prose = Prose::new(&d);
+        let _ = detect(
+            &d,
+            &prose,
+            &Suppressions::default(),
+            &[enabled(4), enabled(6)],
+        );
+        prose.tag_runs.load(Ordering::Relaxed)
+    }
+
+    #[test]
+    fn tagging_runs_once_per_pass() {
+        assert_eq!(
+            runs("The library serves as a guide. It is not only cheap but also quick.\n"),
+            1
+        );
+    }
+
+    #[test]
+    fn no_candidate_no_tagging() {
+        assert_eq!(runs("Plain prose with nothing to fix.\n"), 0);
+    }
 }
