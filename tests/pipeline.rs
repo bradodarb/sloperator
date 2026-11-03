@@ -412,3 +412,39 @@ fn rejected_new_check_is_slp901_with_name() {
             .starts_with("rewrite rejected (negation):")
     );
 }
+
+#[test]
+fn failing_template_fix_is_slp901() {
+    use sloperator::edit::{Proposal, ProposalOrigin};
+    let text = "It is not only cheap but also Paris.\n";
+    let tmp = tempfile::tempdir().unwrap();
+    let mut a = pipeline::analyse(source(tmp.path(), text)).unwrap();
+    let f = a
+        .findings
+        .iter_mut()
+        .find(|f| f.code == RuleCode(4))
+        .expect("SLP004 fires");
+    let start = text.find("not only").unwrap();
+    f.fix = Some(Proposal {
+        range: start..text.find('.').unwrap(),
+        replacement: "cheap and quick".into(),
+        origin: ProposalOrigin::Rule(RuleCode(4)),
+    });
+    let r = pipeline::fix(a, RULES_ONLY, None, DEFAULT_SEED).unwrap();
+    assert!(r.fixed.is_none(), "original bytes must be kept");
+    assert_eq!(&*r.original, text);
+    let rejected: Vec<_> = r
+        .findings
+        .iter()
+        .filter(|f| f.finding.code == RuleCode::REWRITE_REJECTED)
+        .collect();
+    assert_eq!(rejected.len(), 1);
+    assert!(
+        rejected[0]
+            .finding
+            .message
+            .starts_with("rewrite rejected (properNouns):"),
+        "{}",
+        rejected[0].finding.message
+    );
+}

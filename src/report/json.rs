@@ -89,6 +89,7 @@ pub(super) fn render(
                         message: &l.finding.message,
                         matched: &l.matched,
                         // A safe fix exists when the rule attached one; a model fix whenever the rule is model-class.
+                        // Safe-class findings without a fix may still be rewritten by the model.
                         fix: Fix {
                             available: match class {
                                 FixClass::Safe => l.finding.fix.is_some(),
