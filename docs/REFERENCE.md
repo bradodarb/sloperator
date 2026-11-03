@@ -241,7 +241,12 @@ config values fail with the dotted key. CLI and MCP rule explanations expose the
   `SINGULAR_SUBJECT` (`it`, `this`, `that`, `which`, `who`, `he`, `she`, same sentence), a base form after a modal or
   "to" (one adverb allowed between) → "be", and in both cases only when the next word after "as" is in
   `AS_COMPLEMENT` (`a`, `an`, `the`, `its`, `his`, `her`, `their`, `our`, `your`, `my`, `one`, `another`). With no next
-  word in the block, or a protected run after "as", there is no fix. Every other form fires with no fix.
+  word in the block, or a protected run after "as", there is no fix. A further "is" branch accepts
+  sentence-initial determiner/noun subjects, optionally with one adjective, only when all subject tags are
+  certain, the determiner is singular-compatible, and whitespace/protection guards hold. It excludes
+  "as a matter/result/rule/whole" and any following verb or modal in the clause. Thus "The library serves as
+  a guide" becomes "The library is a guide", while ambiguous "The tool serves as a bridge" has no fix.
+  Every other form fires with no fix. Tags are computed lazily once per document pass.
 - Pattern and residue rules (`builtin/slp003_*` … `slp015_*`), all on by default in v0.1.0. Each is a `PatternRule`
   over the prose of a block, so a match never crosses code or a link.
   - SLP003 `not-x-but-y` and SLP004 `not-just-but-also` (negative parallelism), SLP007 `significance-puffery` and
