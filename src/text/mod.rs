@@ -7,19 +7,24 @@
 //! `syllable::syllables` separately estimates English syllables using vowel groups, silent suffixes,
 //! and a compiled exception table. It returns zero for words without letters and at least one otherwise;
 //! non-ASCII letters count as vowels. The counter is approximate and has no pipeline callers yet.
+//! `Prose::counts` memoises integer paragraph statistics. `Counts::derive` applies sample floors and rounds
+//! metrics once to two decimals; values below either floor are unavailable. Merging counts unions word types.
+
+use std::sync::OnceLock;
 
 use crate::doc::Document;
 
+pub mod metrics;
 pub mod segment;
 pub mod syllable;
 
+pub use metrics::{Counts, Floors, Metrics};
 pub use segment::{Segments, Sentence, Word};
 
 /// One document pass's owned analysis (ADR-02), paired with the document it was built from.
 pub struct Prose {
     segments: Segments,
-    // Retained for document-pair assertions when lazy analyses are added.
-    #[allow(dead_code)]
+    counts: OnceLock<Counts>,
     src_len: usize,
 }
 
@@ -28,12 +33,24 @@ impl Prose {
     pub fn new(doc: &Document) -> Prose {
         Prose {
             segments: segment::segment(doc),
+            counts: OnceLock::new(),
             src_len: doc.src.len(),
         }
     }
 
     pub fn segments(&self) -> &Segments {
         &self.segments
+    }
+
+    /// Paragraph metric counts, computed once on first use with the paired document.
+    pub fn counts(&self, doc: &Document) -> &Counts {
+        debug_assert_eq!(
+            doc.src.len(),
+            self.src_len,
+            "a Prose is used with another Document"
+        );
+        self.counts
+            .get_or_init(|| metrics::counts(doc, &self.segments))
     }
 }
 
@@ -42,3 +59,26 @@ const _: fn() = || {
     fn ok<T: Send + Sync>() {}
     ok::<Prose>();
 };
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::doc::{self, Format, ProtectSettings};
+
+    #[test]
+    fn counts_are_cached_without_rescanning() {
+        let doc = doc::parse(
+            "Cat cat. Dog!".into(),
+            Format::PlainText,
+            &ProtectSettings::default(),
+        );
+        let prose = Prose::new(&doc);
+        assert!(prose.counts.get().is_none());
+        let before = segment::scans();
+        let first = prose.counts(&doc);
+        assert_eq!(first.words, 3);
+        assert_eq!(first.sentences, 2);
+        assert!(std::ptr::eq(first, prose.counts(&doc)));
+        assert_eq!(segment::scans(), before);
+    }
+}
