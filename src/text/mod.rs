@@ -4,7 +4,8 @@
 //! SLP006 shares its modal list; `to` remains a separate infinitive guard in the rule.
 //!
 //! `tagger::tag` tags cached words using owned tables and contextual rules. Only unchanged single-tag
-//! lexicon entries are certain; ambiguous and unknown words cannot authorize safe fixes.
+//! lexicon entries are certain; ambiguous and unknown words cannot authorize safe fixes. `Prose::tags` memoises
+//! the tag vector on first use; rules run cheap candidate guards first, so plain prose never invokes the tagger.
 //!
 //! Build one owned `Prose` per document pass. Segmentation eagerly caches each block's sentence bounds and
 //! every prose word; consumers can query ranges without scanning again. Pair it with its original document.
@@ -17,6 +18,8 @@
 //! metrics once to two decimals; values below either floor are unavailable. Merging counts unions word types.
 
 use std::sync::OnceLock;
+#[cfg(test)]
+use std::sync::atomic::{AtomicU32, Ordering};
 
 use crate::doc::Document;
 
@@ -33,6 +36,9 @@ pub use tagger::{Tag, Tagged};
 /// One document pass's owned analysis (ADR-02), paired with the document it was built from.
 pub struct Prose {
     segments: Segments,
+    tags: OnceLock<Vec<Tagged>>,
+    #[cfg(test)]
+    pub(crate) tag_runs: AtomicU32,
     counts: OnceLock<Counts>,
     src_len: usize,
 }
@@ -42,6 +48,9 @@ impl Prose {
     pub fn new(doc: &Document) -> Prose {
         Prose {
             segments: segment::segment(doc),
+            tags: OnceLock::new(),
+            #[cfg(test)]
+            tag_runs: AtomicU32::new(0),
             counts: OnceLock::new(),
             src_len: doc.src.len(),
         }
@@ -49,6 +58,20 @@ impl Prose {
 
     pub fn segments(&self) -> &Segments {
         &self.segments
+    }
+
+    /// One tag per cached word, computed lazily once per document pass.
+    pub fn tags(&self, doc: &Document) -> &[Tagged] {
+        debug_assert_eq!(
+            doc.src.len(),
+            self.src_len,
+            "a Prose is used with another Document"
+        );
+        self.tags.get_or_init(|| {
+            #[cfg(test)]
+            self.tag_runs.fetch_add(1, Ordering::Relaxed);
+            tagger::tag(doc, &self.segments)
+        })
     }
 
     /// Paragraph metric counts, computed once on first use with the paired document.
