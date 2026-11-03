@@ -37,7 +37,9 @@ cargo build --release --locked --no-default-features  # rules-only binary
 verified edits to the files. `--rules-only` skips the model and applies only deterministic rule fixes.
 
 `tests/layering.rs` and `tests/standalone.rs` guard the module rules and keep the crate self-contained: no forbidden
-`crate::` edges, no I/O in the pure modules, and no `path` dependencies in `Cargo.toml`.
+`crate::` edges, no I/O in the pure modules (including `text`), and no `path` dependencies in `Cargo.toml`.
+The layering tests also restrict `Prose` construction to document passes and the window/rule test modules,
+segmentation calls to `Prose`, and sentence-boundary scans to the segmenter.
 `builds_when_extracted` copies every file in the crate except the top-level `.git` and `target/` (so `docs/` is
 included) to a temp directory and runs `cargo test --no-default-features --locked --offline` there; it is
 `#[ignore]`d and runs only in the integration tier.

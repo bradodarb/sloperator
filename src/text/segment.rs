@@ -323,10 +323,10 @@ mod tests {
         let d = md("First.\n\nSecond.\n\nThird.");
         assert_eq!(d.blocks.len(), 3);
         let before = scans();
-        let prose = super::super::Prose::new(&d);
+        let segments = segment(&d);
         assert_eq!(scans() - before, 3);
         for b in &d.blocks {
-            prose.segments().sentence_span(&d, b.id, &b.range);
+            segments.sentence_span(&d, b.id, &b.range);
         }
         assert_eq!(scans() - before, 3);
     }
