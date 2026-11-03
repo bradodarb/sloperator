@@ -420,52 +420,6 @@ struct Canvas {
 
 const NO_BLOCK: u32 = u32::MAX;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn to_text_inverts_to_src() {
-        let doc = parse(
-            Arc::from("Café before `code` and after."),
-            Format::Markdown,
-            &ProtectSettings::default(),
-        );
-        let text = doc.block_text(doc.blocks[0].id);
-        for t in 0..text.text.len() {
-            if let Some(s) = text.to_src(t) {
-                assert_eq!(text.to_text(s), Some(t));
-            }
-        }
-        let code = doc.src.find("`code`").unwrap();
-        for s in code..code + "`code`".len() {
-            assert_eq!(text.to_text(s), None);
-        }
-        assert_eq!(text.to_text(doc.src.len()), None);
-        assert_eq!(text.to_text(usize::MAX), None);
-    }
-
-    #[test]
-    fn continuation_prefix_len_skips_quote_markup() {
-        let doc = parse(
-            Arc::from("> First line\n> next line\n"),
-            Format::Markdown,
-            &ProtectSettings::default(),
-        );
-        let ls = doc.src.find("\n").unwrap() + 1;
-        assert_eq!(doc.continuation_prefix_len(ls, doc.src.len()), 2);
-        assert_eq!(doc.continuation_prefix_len(ls, ls + 1), 1);
-
-        let plain = parse(
-            Arc::from("First line\nnext line\n"),
-            Format::PlainText,
-            &ProtectSettings::default(),
-        );
-        let ls = plain.src.find("\n").unwrap() + 1;
-        assert_eq!(plain.continuation_prefix_len(ls, plain.src.len()), 0);
-    }
-}
-
 impl Canvas {
     fn new(len: usize, fill: SpanKind) -> Canvas {
         Canvas {
@@ -517,5 +471,51 @@ impl Canvas {
             });
         }
         spans
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn to_text_inverts_to_src() {
+        let doc = parse(
+            Arc::from("Café before `code` and after."),
+            Format::Markdown,
+            &ProtectSettings::default(),
+        );
+        let text = doc.block_text(doc.blocks[0].id);
+        for t in 0..text.text.len() {
+            if let Some(s) = text.to_src(t) {
+                assert_eq!(text.to_text(s), Some(t));
+            }
+        }
+        let code = doc.src.find("`code`").unwrap();
+        for s in code..code + "`code`".len() {
+            assert_eq!(text.to_text(s), None);
+        }
+        assert_eq!(text.to_text(doc.src.len()), None);
+        assert_eq!(text.to_text(usize::MAX), None);
+    }
+
+    #[test]
+    fn continuation_prefix_len_skips_quote_markup() {
+        let doc = parse(
+            Arc::from("> First line\n> next line\n"),
+            Format::Markdown,
+            &ProtectSettings::default(),
+        );
+        let ls = doc.src.find("\n").unwrap() + 1;
+        assert_eq!(doc.continuation_prefix_len(ls, doc.src.len()), 2);
+        assert_eq!(doc.continuation_prefix_len(ls, ls + 1), 1);
+
+        let plain = parse(
+            Arc::from("First line\nnext line\n"),
+            Format::PlainText,
+            &ProtectSettings::default(),
+        );
+        let ls = plain.src.find("\n").unwrap() + 1;
+        assert_eq!(plain.continuation_prefix_len(ls, plain.src.len()), 0);
     }
 }

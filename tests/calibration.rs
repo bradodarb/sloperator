@@ -46,7 +46,11 @@ fn calibration_corpus_is_licensed_and_measurable() {
         );
         let text = std::fs::read_to_string(&path).unwrap();
         bytes += text.len();
-        let d = doc::parse(Arc::from(text), Format::Markdown, &ProtectSettings::default());
+        let d = doc::parse(
+            Arc::from(text),
+            Format::Markdown,
+            &ProtectSettings::default(),
+        );
         assert!(
             d.blocks.iter().all(|b| b.kind == BlockKind::Paragraph),
             "{name}: non-paragraph block"

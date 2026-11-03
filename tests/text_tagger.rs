@@ -136,7 +136,7 @@ fn admitted_classes(src: &str) -> Vec<usize> {
                     continue;
                 }
                 let mut verb = false;
-                for i in first..end {
+                for (i, tagged) in out.iter().enumerate().take(end).skip(first) {
                     if i > first
                         && doc.src[seg.words[i - 1].range.end..seg.words[i].range.start]
                             .contains([',', ';', ':', '(', '—', '–'])
@@ -144,7 +144,7 @@ fn admitted_classes(src: &str) -> Vec<usize> {
                         break;
                     }
                     if matches!(
-                        out[i].tag,
+                        tagged.tag,
                         Tag::Verb | Tag::Verb3s | Tag::VerbPast | Tag::Modal
                     ) {
                         verb = true;

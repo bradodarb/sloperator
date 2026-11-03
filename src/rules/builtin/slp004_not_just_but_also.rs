@@ -61,7 +61,12 @@ pub(super) fn rule() -> Box<dyn Rule> {
 
 impl NotJustButAlso {
     /// `X and Y`, or `None` when any guard fails (FR-8.1, FR-8.3).
-    fn template_fix(&self, ctx: &RuleCtx<'_>, bt: &BlockText, at: usize) -> Option<(Range<usize>, String)> {
+    fn template_fix(
+        &self,
+        ctx: &RuleCtx<'_>,
+        bt: &BlockText,
+        at: usize,
+    ) -> Option<(Range<usize>, String)> {
         let c = self
             .template
             .captures_at(&bt.text, at)

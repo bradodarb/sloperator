@@ -209,7 +209,7 @@ fn tag_certain_subject(doc: &Document, prose: &Prose, verb: usize) -> bool {
     {
         return false;
     }
-    for i in first..end {
+    for (i, tagged) in tags.iter().enumerate().take(end).skip(first) {
         if i > first {
             let gap = &doc.src[seg.words[i - 1].range.end..seg.words[i].range.start];
             if gap.contains([',', ';', ':', '(', '\u{2014}', '\u{2013}']) {
@@ -217,7 +217,7 @@ fn tag_certain_subject(doc: &Document, prose: &Prose, verb: usize) -> bool {
             }
         }
         if matches!(
-            tags[i].tag,
+            tagged.tag,
             Tag::Verb | Tag::Verb3s | Tag::VerbPast | Tag::Modal
         ) {
             return false;

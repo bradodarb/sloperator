@@ -155,6 +155,7 @@ static BE_FORMS: &[&str] = &["am", "are", "be", "been", "being", "is", "was", "w
 /// 3. an adverbial row opens the sentence, then a comma and a subject pronoun ("At this point in time, we stop."). The
 ///    replacement is itself an adverbial and the main clause has its own subject, so nothing after the comma depends
 ///    on the deleted noun.
+///
 /// No other word after the noun is allowed, so a coordinated, compared or appended phrase ("… to leave and a plan to
 /// return") is refused however it is joined: there is no room for it (review round 3).
 fn noun_final_allows(src: &str, seg: &Segments, m: &Range<usize>) -> bool {
