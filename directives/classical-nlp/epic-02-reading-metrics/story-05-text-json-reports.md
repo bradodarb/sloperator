@@ -22,7 +22,6 @@
 | `CHANGELOG.md` | top | `## 0.2.0 (unreleased)` with metrics bullets and binary size |
 | `tests/report.rs` | existing | tests below (methods added) |
 | `tests/text_metrics.rs` | existing | tests below (methods added) |
-| `tests/standalone.rs` | existing | tests below (methods added) |
 
 ## Acceptance Criteria
 
@@ -49,10 +48,9 @@
 | 6 | `sloperator::report` | `concise_and_github_print_no_metrics` | no metrics in either format | FR-3.5 |
 | 7 | `sloperator::text_metrics` | `json_identical_across_runs` | two CLI runs give identical JSON bytes | NFR-3 |
 | 8 | `sloperator::text_metrics` | `summary_uses_run_root_floors` | a CLI run in a dir whose `sloperator.toml` sets `[metrics] min_sentences = 10` gives `summary.metrics` values null for a 6-sentence file | FR-2.7, D-5 |
-| 9 | `sloperator::standalone` | `no_host_references` | the new docs use the repo's own test form | NFR-1 |
 
 ## Notes
 
 The summary JSON assertion (tests/report.rs:166-168) gains a `metrics` object with every value `null`. Measure the binary size with `make build` before and after, and write both sizes into the CHANGELOG. The CLI tests in tests/text_metrics.rs follow tests/score.rs:82-99.
 
-Gate: `make -f "$AEGIS_DIR/Makefile" test UNIT=sloperator TESTS='sloperator::report text_metrics#json_identical_across_runs text_metrics#summary_uses_run_root_floors sloperator::standalone#no_host_references'`
+Gate: `make -f "$AEGIS_DIR/Makefile" test UNIT=sloperator TESTS='sloperator::report text_metrics#json_identical_across_runs text_metrics#summary_uses_run_root_floors'`

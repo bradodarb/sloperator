@@ -1,5 +1,10 @@
 # Story 01: Make the standalone host-reference scan pass on this branch
 
+> **SUPERSEDED (2026-11-02) — not in the active slice; do not build.** PR #10 (`chore/drop-host-reference-scan`, merged to
+> `main` and into this branch at 33af7a3) deleted `standalone::no_host_references`, its markers and the scan itself
+> (`tests/standalone.rs` now only checks path deps and the extracted build). Both parts of this story fixed failures of
+> that scan, so nothing is left to do: the PRD line and `NOT_SCANNED` stay as they are. Kept for history only.
+
 **Epic:** [epic-01-sentence-seam](../epic-01-sentence-seam.md)
 **SPEC Refs:** §1 (Standalone-scan hygiene of the initiative docs)
 **PRD Refs:** NFR-1, NFR-10
@@ -41,4 +46,4 @@ No `src/` change.
 
 tests/standalone.rs:15-35 lists the markers. Docs written by later stories (CHANGELOG, REFERENCE, eval/, docs/classical-nlp/spikes/) are still scanned, so they must use only the repo's `make test TESTS='…'` / `make build` form. The `directives` exclusion is this slice's provisional answer to a question only Brad can settle (index.md, "Open question for Brad"). If he picks the other option, this story drops part 2 and the landing removes `directives/` instead.
 
-Gate: `make -f "$AEGIS_DIR/Makefile" test UNIT=sloperator TESTS='sloperator::standalone'`
+Former gate (not run): `make -f "$AEGIS_DIR/Makefile" test UNIT=sloperator TESTS='sloperator::standalone'`

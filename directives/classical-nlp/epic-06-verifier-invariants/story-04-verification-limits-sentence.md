@@ -19,7 +19,6 @@ Replace the old sentence ("… not names or claim polarity.") with §25's text, 
 | `tests/score.rs` | 107-111 | assertion updated |
 | `docs/SPEC.md` | 238 | new sentence |
 | `CHANGELOG.md` | 0.2.0 section | verifier invariants |
-| `tests/standalone.rs` | existing | tests below (methods added) |
 
 ## Acceptance Criteria
 
@@ -33,10 +32,9 @@ Replace the old sentence ("… not names or claim polarity.") with §25's text, 
 | # | Test class | Test method | Verifies | Validates |
 |---|------------|-------------|----------|-----------|
 | 1 | `sloperator::score` | `reference_states_limits` | REFERENCE carries the new limits sentence | FR-6.7 |
-| 2 | `sloperator::standalone` | `no_host_references` | doc edits use the repo's own form | NFR-1 |
 
 ## Notes
 
 docs/classical-nlp/ quotes the old sentence on purpose (SPEC §25, PRD). Leave those initiative documents alone: the grep criterion applies to product docs, src/ and tests/.
 
-Gate: `make -f "$AEGIS_DIR/Makefile" test UNIT=sloperator TESTS='reference_states_limits sloperator::standalone#no_host_references'`
+Gate: `make -f "$AEGIS_DIR/Makefile" test UNIT=sloperator TESTS='reference_states_limits'`
