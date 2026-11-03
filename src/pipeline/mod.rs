@@ -13,6 +13,7 @@ use crate::engine::window::{Window, WindowPlan, windows};
 use crate::input::{Origin, Source};
 use crate::rules::registry::Registry;
 use crate::rules::{Finding, RuleCode, Severity};
+use crate::text::Prose;
 use crate::verify::{self, Check, Rejection, Verified};
 use crate::{directives, edit, engine, rules, score};
 
@@ -34,6 +35,7 @@ pub struct Engines {
 pub struct Analysis {
     pub source: Source,
     pub doc: Document,
+    pub prose: Prose,
     pub sup: directives::Suppressions,
     pub findings: Vec<Finding>,
 }
@@ -67,10 +69,11 @@ pub struct FileResult {
 /// # Errors
 /// `Error::UnknownRule` or `Error::Directive` from a bad directive (FR-6.5).
 pub fn analyse(source: Source) -> Result<Analysis, Error> {
-    let (doc, sup, findings) = detect_in(Arc::clone(&source.text), &source)?;
+    let (doc, prose, sup, findings) = detect_in(Arc::clone(&source.text), &source)?;
     Ok(Analysis {
         source,
         doc,
+        prose,
         sup,
         findings,
     })
@@ -104,6 +107,7 @@ pub fn fix(
 ) -> Result<FileResult, Error> {
     let min = a.source.settings.min_severity;
     let doc0 = a.doc;
+    let prose0 = a.prose;
     let findings0 = a.findings;
     let score_before = score::score(&reported(findings0.clone(), min), doc0.prose_words());
     // Rejections, with ranges in the original text, and the verified edits that produced the fixed text.
@@ -143,12 +147,13 @@ pub fn fix(
     // findings. The findings it adds (SLP901/902) are placed in the step-2 text.
     let step2 = match (engines.model, rw) {
         (true, Some(rw)) => {
-            let (base, base_sup, base_findings) = match &step1 {
-                Some((d, s, f)) => (d, s, f.as_slice()),
-                None => (&doc0, &a.sup, findings0.as_slice()),
+            let (base, base_prose, base_sup, base_findings) = match &step1 {
+                Some((d, p, s, f)) => (d, p, s, f.as_slice()),
+                None => (&doc0, &prose0, &a.sup, findings0.as_slice()),
             };
             let m = model_windows(
                 base,
+                base_prose,
                 base_sup.frozen_ranges(),
                 base_findings,
                 &a.source,
@@ -160,20 +165,20 @@ pub fn fix(
             }
             system.extend(m.system);
             if m.applied.is_empty() {
-                step1.map(|(d, _, f)| (d, f))
+                step1.map(|(d, p, _, f)| (d, p, f))
             } else {
                 let text2: Arc<str> = edit::apply(&base.src, &m.applied, base.newline).into();
-                let (d, _, f) = detect_in(text2, &a.source)?;
-                Some((d, f))
+                let (d, p, _, f) = detect_in(text2, &a.source)?;
+                Some((d, p, f))
             }
         }
-        _ => step1.map(|(d, _, f)| (d, f)),
+        _ => step1.map(|(d, p, _, f)| (d, p, f)),
     };
 
     // Step 3: whole-document check. A failure discards every edit and reports one SLP901 (architecture §7.2).
     let (final_doc, final_findings, system) = match step2 {
         None => (doc0, findings0, system),
-        Some((d, f)) => match verify::document(&doc0, &d) {
+        Some((d, _prose, f)) => match verify::document(&doc0, &d) {
             Ok(()) => (d, f, system),
             Err(r) => (doc0, findings0, vec![rejection(r)]),
         },
@@ -211,6 +216,7 @@ struct ModelStep {
 /// A model load or runtime error (FR-9.7), or a bad directive in a candidate text.
 fn model_windows(
     doc: &Document,
+    prose: &Prose,
     frozen: &[Range<usize>],
     findings: &[Finding],
     source: &Source,
@@ -224,7 +230,7 @@ fn model_windows(
     };
     // The end of the last window sent: a window that overlaps it (a sentence window over two sentences) is skipped.
     let mut sent_to = 0;
-    for plan in windows(doc, findings, frozen, s) {
+    for plan in windows(doc, prose, findings, frozen, s) {
         let w = match plan {
             WindowPlan::Rewrite(w) if w.range.start >= sent_to => w,
             WindowPlan::Rewrite(w) => {
@@ -280,7 +286,7 @@ fn accept(
     // The rewritten window in the candidate: `apply` may have normalised the replacement's line endings.
     let start = verified.get().range.start;
     let new_range = start..candidate.len() - (doc.src.len() - verified.get().range.end);
-    let (_, _, after) = detect_in(candidate, source)?;
+    let (_, _, _, after) = detect_in(candidate, source)?;
     let weight_after = after
         .iter()
         .filter(|f| {
@@ -291,11 +297,10 @@ fn accept(
     Ok(verify::improvement(w.weight_before, weight_after, w.range.clone()).map(|()| verified))
 }
 
+type Detected = (Document, Prose, directives::Suppressions, Vec<Finding>);
+
 /// Parse, extract directives and detect over `text` with the settings of `source`.
-fn detect_in(
-    text: Arc<str>,
-    source: &Source,
-) -> Result<(Document, directives::Suppressions, Vec<Finding>), Error> {
+fn detect_in(text: Arc<str>, source: &Source) -> Result<Detected, Error> {
     let s = &source.settings;
     let mut d = doc::parse(text, source.format, &s.protect);
     let path = match &source.origin {
@@ -304,8 +309,9 @@ fn detect_in(
     };
     let reg = Registry::builtin();
     let sup = directives::extract(&mut d, &path, reg)?;
-    let findings = rules::detect(&d, &sup, &s.enabled(reg));
-    Ok((d, sup, findings))
+    let prose = Prose::new(&d);
+    let findings = rules::detect(&d, &prose, &sup, &s.enabled(reg));
+    Ok((d, prose, sup, findings))
 }
 
 /// The findings that pass `--min-severity`. System findings always pass (DQ-4).
