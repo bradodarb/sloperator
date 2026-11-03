@@ -4,6 +4,7 @@
 //! `toml::Table` to name the dotted key that failed (FR-7.6), because a serde error carries the reason but not the path.
 
 use std::collections::BTreeMap;
+use std::num::NonZeroU64;
 use std::path::{Path, PathBuf};
 
 use serde::de::DeserializeOwned;
@@ -26,6 +27,7 @@ pub struct ConfigFile {
     pub per_file: Option<Vec<PerFile>>,
     pub protect: Option<ProtectFile>,
     pub model: Option<ModelFile>,
+    pub metrics: Option<MetricsFile>,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -60,6 +62,14 @@ pub struct ModelFile {
     pub max_window_chars: Option<usize>,
     pub max_tokens: Option<u32>,
     pub seed: Option<u32>,
+}
+
+/// Top-level metric sample floors; positive integers only, with omitted values inherited.
+#[derive(Debug, Default, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MetricsFile {
+    pub min_sentences: Option<NonZeroU64>,
+    pub min_words: Option<NonZeroU64>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
@@ -202,6 +212,11 @@ const MODEL: &[(&str, Kind)] = &[
     ("seed", Kind::Leaf(is::<u32>)),
 ];
 
+const METRICS: &[(&str, Kind)] = &[
+    ("min_sentences", Kind::Leaf(is::<NonZeroU64>)),
+    ("min_words", Kind::Leaf(is::<NonZeroU64>)),
+];
+
 const TOP: &[(&str, Kind)] = &[
     ("extend", STRING),
     ("select", STRINGS),
@@ -215,6 +230,7 @@ const TOP: &[(&str, Kind)] = &[
     ("per_file", Kind::Tables(PER_FILE, "glob")),
     ("protect", Kind::Table(PROTECT)),
     ("model", Kind::Table(MODEL)),
+    ("metrics", Kind::Table(METRICS)),
 ];
 
 /// The first unknown key, wrong type or missing required key in `table`, as `Error::Config` with a dotted key.

@@ -3,6 +3,8 @@
 //! `pipeline` never uses `cli`, `report`, `write` or `engine::runtime` (layering). `lint` takes no rewriter, so it
 //! cannot reach the model (FR-2.1, D-3). `fix` runs the rules engine's safe fixes (step 1), then the model windows
 //! (step 2), then the whole-document check (step 3) and the report and scores (step 4).
+//! Results retain paragraph counts and file-specific floors. Fix/Diff pairs original counts with counts from
+//! the surviving document pass, including the original when whole-document verification rejects the edits.
 
 use std::ops::Range;
 use std::sync::Arc;
@@ -13,7 +15,7 @@ use crate::engine::window::{Window, WindowPlan, windows};
 use crate::input::{Origin, Source};
 use crate::rules::registry::Registry;
 use crate::rules::{Finding, RuleCode, Severity};
-use crate::text::Prose;
+use crate::text::{Counts, Floors, Prose};
 use crate::verify::{self, Check, Rejection, Verified};
 use crate::{directives, edit, engine, rules, score};
 
@@ -62,6 +64,12 @@ pub struct FileResult {
     pub score_before: Option<score::Score>,
     /// The final text; Fix/Diff only, and only when it differs from the original.
     pub fixed: Option<String>,
+    /// Paragraph metric counts of the final text.
+    pub metrics: Counts,
+    /// Paragraph metric counts of the original text; Fix/Diff only.
+    pub metrics_before: Option<Counts>,
+    /// Sample floors resolved for this file.
+    pub floors: Floors,
 }
 
 /// Parses the source, extracts its directives and runs the enabled rules. Pure and safe to run in parallel (ADR-09).
@@ -91,6 +99,9 @@ pub fn lint(a: Analysis) -> FileResult {
         score,
         score_before: None,
         fixed: None,
+        metrics: a.prose.counts(&a.doc).clone(),
+        metrics_before: None,
+        floors: a.source.settings.metrics,
     }
 }
 
@@ -108,6 +119,7 @@ pub fn fix(
     let min = a.source.settings.min_severity;
     let doc0 = a.doc;
     let prose0 = a.prose;
+    let metrics_before = prose0.counts(&doc0).clone();
     let findings0 = a.findings;
     let score_before = score::score(&reported(findings0.clone(), min), doc0.prose_words());
     // Rejections, with ranges in the original text, and the verified edits that produced the fixed text.
@@ -176,13 +188,14 @@ pub fn fix(
     };
 
     // Step 3: whole-document check. A failure discards every edit and reports one SLP901 (architecture §7.2).
-    let (final_doc, final_findings, system) = match step2 {
-        None => (doc0, findings0, system),
-        Some((d, _prose, f)) => match verify::document(&doc0, &d) {
-            Ok(()) => (d, f, system),
-            Err(r) => (doc0, findings0, vec![rejection(r)]),
+    let (final_doc, final_prose, final_findings, system) = match step2 {
+        None => (doc0, prose0, findings0, system),
+        Some((d, p, f)) => match verify::document(&doc0, &d) {
+            Ok(()) => (d, p, f, system),
+            Err(r) => (doc0, prose0, findings0, vec![rejection(r)]),
         },
     };
+    let metrics = final_prose.counts(&final_doc).clone();
     let fixed = (final_doc.src != a.source.text).then(|| final_doc.src.to_string());
 
     // Step 4: report the findings left in the final text that pass --min-severity, plus every SLP9xx.
@@ -197,6 +210,9 @@ pub fn fix(
         score,
         score_before: Some(score_before),
         fixed,
+        metrics,
+        metrics_before: Some(metrics_before),
+        floors: a.source.settings.metrics,
     })
 }
 

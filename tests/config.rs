@@ -13,6 +13,7 @@ use sloperator::cli::ExitCode;
 use sloperator::config::{CliOverrides, Resolver, Settings, WindowMode};
 use sloperator::rules::registry::Registry;
 use sloperator::rules::{RuleCode, Severity};
+use sloperator::text::Floors;
 
 fn codes(s: &Settings) -> Vec<u16> {
     s.rules.keys().map(|c| c.0).collect()
@@ -409,4 +410,150 @@ fn config_command_prints_resolved_json() {
     );
     assert_eq!(code, ExitCode::Failure, "stderr: {err}");
     assert!(err.contains("model.windwo"), "stderr: {err}");
+}
+
+#[test]
+fn metrics_floors_default_to_5_and_100() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut r = Resolver::new(CliOverrides::default(), None).unwrap();
+    assert_eq!(
+        r.for_file(&tmp.path().join("doc.md")).unwrap().metrics,
+        Floors {
+            sentences: 5,
+            words: 100
+        }
+    );
+    let config = tmp.path().join("sloperator.toml");
+    write(&config, "select = [\"SLP001\"]\n");
+    let mut r = Resolver::new(CliOverrides::default(), Some(&config)).unwrap();
+    assert_eq!(
+        r.for_file(&tmp.path().join("doc.md")).unwrap().metrics,
+        Floors::default()
+    );
+}
+
+#[test]
+fn metrics_floors_load_from_table() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    write(
+        &root.join("sloperator.toml"),
+        "[metrics]\nmin_sentences = 10\nmin_words = 200\n",
+    );
+    let mut r = Resolver::new(CliOverrides::default(), None).unwrap();
+    for path in ["doc.md", "sub/deep/doc.md"] {
+        assert_eq!(
+            r.for_file(&root.join(path)).unwrap().metrics,
+            Floors {
+                sentences: 10,
+                words: 200
+            }
+        );
+    }
+    // Each explicitly set field overrides the chain; omitted fields inherit.
+    let child = root.join("child.toml");
+    write(
+        &child,
+        "extend = \"sloperator.toml\"\n[metrics]\nmin_words = 300\n[[per_file]]\nglob = \"**/*.md\"\nmin_severity = \"error\"\n",
+    );
+    let mut r = Resolver::new(CliOverrides::default(), Some(&child)).unwrap();
+    write(&root.join("sub/doc.md"), "text\n");
+    let s = r.for_file(&root.join("sub/doc.md")).unwrap();
+    assert_eq!(
+        s.metrics,
+        Floors {
+            sentences: 10,
+            words: 300
+        }
+    );
+    assert_eq!(s.min_severity, Severity::Error);
+    let small = root.join("small.toml");
+    write(&small, "[metrics]\nmin_sentences = 1\nmin_words = 1\n");
+    let mut r = Resolver::new(CliOverrides::default(), Some(&small)).unwrap();
+    assert_eq!(
+        r.for_file(&root.join("doc.md")).unwrap().metrics,
+        Floors {
+            sentences: 1,
+            words: 1
+        }
+    );
+}
+
+#[test]
+fn metrics_floors_reject_invalid_values() {
+    let tmp = tempfile::tempdir().unwrap();
+    let config = tmp.path().join("bad.toml");
+    for (line, expected) in [
+        ("min_sentences = 0", "metrics.min_sentences"),
+        ("min_words = -5", "metrics.min_words"),
+        ("min_words = 1.5", "metrics.min_words"),
+        ("max = 3", "metrics.max"),
+        ("min_words = \"100\"", "metrics.min_words"),
+        ("min_sentences = false", "metrics.min_sentences"),
+    ] {
+        write(&config, &format!("[metrics]\n{line}\n"));
+        let (file, key, reason) = config_error(&config);
+        assert_eq!(file, canon(&config));
+        assert_eq!(key, expected, "{line}: {reason}");
+        assert!(!reason.is_empty());
+    }
+    write(
+        &config,
+        "[[per_file]]\nglob = \"*.md\"\n[per_file.metrics]\nmin_words = 200\n",
+    );
+    assert_eq!(config_error(&config).1, "per_file[0].metrics");
+}
+
+#[test]
+fn metrics_floors_run_root() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    let mut defaults = Resolver::new(CliOverrides::default(), None).unwrap();
+    assert_eq!(defaults.run_floors(root).unwrap(), Floors::default());
+    write(
+        &root.join("sloperator.toml"),
+        "[metrics]\nmin_sentences = 10\nmin_words = 200\n",
+    );
+    write(
+        &root.join("sub/sloperator.toml"),
+        "[metrics]\nmin_words = 300\n",
+    );
+    fs::create_dir_all(root.join("sub/deep")).unwrap();
+    let mut r = Resolver::new(CliOverrides::default(), None).unwrap();
+    assert_eq!(
+        r.run_floors(root).unwrap(),
+        Floors {
+            sentences: 10,
+            words: 200
+        }
+    );
+    assert_eq!(
+        r.run_floors(&root.join("sub/deep")).unwrap(),
+        Floors {
+            sentences: 5,
+            words: 300
+        }
+    );
+    // Run floors come from cwd, regardless of a previously resolved input's config.
+    r.for_file(&root.join("doc.md")).unwrap();
+    assert_eq!(
+        r.run_floors(&root.join("sub/deep")).unwrap(),
+        Floors {
+            sentences: 5,
+            words: 300
+        }
+    );
+    let explicit = root.join("explicit.toml");
+    write(
+        &explicit,
+        "extend = \"sloperator.toml\"\n[metrics]\nmin_words = 400\n",
+    );
+    let mut r = Resolver::new(CliOverrides::default(), Some(&explicit)).unwrap();
+    assert_eq!(
+        r.run_floors(&root.join("sub/deep")).unwrap(),
+        Floors {
+            sentences: 10,
+            words: 400
+        }
+    );
 }

@@ -12,6 +12,7 @@ use crate::pipeline::{FileResult, Located};
 use crate::rules::registry::Registry;
 use crate::rules::{FixClass, RuleCode, Severity};
 use crate::score::{self, Score};
+use crate::text::{Counts, Floors, Metrics};
 
 mod concise;
 mod github;
@@ -40,12 +41,15 @@ pub struct Summary {
     pub rejected: usize,
     pub skipped: usize,
     pub score: Score,
+    pub metrics: Metrics,
     pub errors: usize,
+    #[serde(skip)]
+    floors: Floors,
 }
 
 impl Summary {
     /// Totals over `results`, with the overall word-weighted score (`score::overall`) and `errors` failed paths.
-    pub fn of(results: &[FileResult], errors: usize) -> Summary {
+    pub fn of(results: &[FileResult], errors: usize, floors: &Floors) -> Summary {
         let all = || results.iter().flat_map(|r| &r.findings);
         let mut by_severity = [0; 3];
         for l in all() {
@@ -53,6 +57,10 @@ impl Summary {
         }
         let count = |code: RuleCode| all().filter(|l| l.finding.code == code).count();
         let scores: Vec<Score> = results.iter().map(|r| r.score).collect();
+        let mut counts = Counts::default();
+        for r in results {
+            counts.merge(&r.metrics);
+        }
         Summary {
             files: results.len(),
             findings: all().count(),
@@ -61,7 +69,9 @@ impl Summary {
             rejected: count(RuleCode::REWRITE_REJECTED),
             skipped: count(RuleCode::WINDOW_SKIPPED),
             score: score::overall(&scores),
+            metrics: counts.derive(floors),
             errors,
+            floors: *floors,
         }
     }
 }

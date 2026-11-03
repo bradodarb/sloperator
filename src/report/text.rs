@@ -6,6 +6,7 @@ use std::io::{self, Write};
 use super::{FileView, Summary, paint, severity_tag};
 use crate::pipeline::Located;
 use crate::score::Score;
+use crate::text::{Floors, Metrics};
 
 pub(super) fn render(
     files: &[FileView<'_>],
@@ -30,9 +31,29 @@ pub(super) fn render(
             writeln!(out, "    {}{caret}", caret_indent(l))?;
         }
         writeln!(out, "{}: score {}", f.path, score_text(&f.result.score))?;
+        let floors = &f.result.floors;
+        if let Some(before) = &f.result.metrics_before {
+            writeln!(
+                out,
+                "{}: metrics before {}",
+                f.path,
+                metrics_text(&before.derive(floors), floors)
+            )?;
+        }
+        writeln!(
+            out,
+            "{}: metrics {}",
+            f.path,
+            metrics_text(&f.result.metrics.derive(floors), floors)
+        )?;
     }
     writeln!(out)?;
-    writeln!(out, "{}", summary_line(summary))
+    writeln!(out, "{}", summary_line(summary))?;
+    writeln!(
+        out,
+        "overall metrics {}",
+        metrics_text(&summary.metrics, &summary.floors)
+    )
 }
 
 /// Whitespace up to the start column, keeping tabs so the caret lines up under a tab-indented line.
@@ -105,4 +126,29 @@ fn thousands(n: usize) -> String {
         out.push(c);
     }
     out
+}
+
+/// Values derived with the same floors used to explain an unavailable sample.
+fn metrics_text(m: &Metrics, floors: &Floors) -> String {
+    match (
+        m.avg_sentence_length,
+        m.grade_level,
+        m.sentence_length_sd,
+        m.sentence_length_cv,
+        m.type_token_ratio,
+    ) {
+        (Some(avg), Some(grade), Some(sd), Some(cv), Some(ttr)) => format!(
+            "avg sentence {avg:.2} words, grade {grade:.2}, sentence-length variation {sd:.2} (cv {cv:.2}), type/token {ttr:.2}"
+        ),
+        _ => format!(
+            "unavailable ({}, {}; needs {} sentences and {} words)",
+            plural(
+                usize::try_from(m.sentences).unwrap_or(usize::MAX),
+                "sentence"
+            ),
+            plural(usize::try_from(m.words).unwrap_or(usize::MAX), "word"),
+            floors.sentences,
+            floors.words,
+        ),
+    }
 }

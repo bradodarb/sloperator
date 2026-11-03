@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.0 (unreleased)
+
+- Text reports show paragraph reading metrics, original metrics for Fix/Diff, and overall metrics from merged counts.
+- JSON adds `files[].metrics`, `files[].metricsBefore` and `summary.metrics`; `schemaVersion` remains 1 and score keys are unchanged.
+- `[metrics] min_sentences` and `min_words` configure positive sample floors (defaults 5/100). Unavailable values are JSON `null`; text explains the configured floors.
+- Release binary on macOS Apple silicon, same default-feature contract build: 20,160,544 bytes before report integration; 20,156,512 bytes after (4,032 bytes smaller). Measured with `make -f "$AEGIS_DIR/Makefile" build UNIT=sloperator` and `wc -c target/release/sloperator`.
+
 ## 0.1.0 (2026-11-01)
 
 First release, delivering epics 01-09. The plan and acceptance audits are in `docs/plan/`.

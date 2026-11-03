@@ -226,7 +226,8 @@ fn check(
 
     // 9. The report goes to stderr when stdout carries content (DQ-11); `-q` prints errors only.
     if !ui.quiet {
-        let summary = Summary::of(&results, errors);
+        let floors = resolver.run_floors(&deps.cwd)?;
+        let summary = Summary::of(&results, errors, &floors);
         let rendered = if content_on_out {
             report::render(args.output_format, &results, &summary, false, err)
         } else {

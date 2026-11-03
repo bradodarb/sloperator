@@ -299,3 +299,52 @@ fn rejection_is_slp901_warning_counts_for_exit() {
     // SLP901 is not scored (DQ-4): the score is that of the kept text's SLP015 alone.
     assert_eq!(r.score.weighted, r.score_before.as_ref().unwrap().weighted);
 }
+
+#[test]
+fn lint_reports_counts_and_resolved_floors() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut src = source(tmp.path(), "# Heading\n\nCat cat. Dog!\n");
+    Arc::make_mut(&mut src.settings).metrics = sloperator::text::Floors {
+        sentences: 10,
+        words: 200,
+    };
+    let a = pipeline::analyse(src).unwrap();
+    let expected = a.prose.counts(&a.doc).clone();
+    let r = pipeline::lint(a);
+    assert_eq!(r.metrics, expected);
+    assert_eq!(r.metrics.words, 3);
+    assert_eq!(r.metrics.sentences, 2);
+    assert_eq!(r.metrics_before, None);
+    assert_eq!(
+        r.floors,
+        sloperator::text::Floors {
+            sentences: 10,
+            words: 200
+        }
+    );
+}
+
+#[test]
+fn whole_document_rejection_keeps_original_metrics() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut a = pipeline::analyse(source(tmp.path(), "utilize cat utilize dog.")).unwrap();
+    let expected = a.prose.counts(&a.doc).clone();
+    // Individually unmatched backticks pass per-edit checks; together they protect inline code.
+    let mut proposals = 0;
+    for f in &mut a.findings {
+        if f.code == RuleCode(1) {
+            f.fix.as_mut().unwrap().replacement = "`".into();
+            proposals += 1;
+        }
+    }
+    assert_eq!(proposals, 2);
+    let r = pipeline::fix(a, RULES_ONLY, None, DEFAULT_SEED).unwrap();
+    assert!(r.findings.iter().any(|l| {
+        l.finding
+            .message
+            .starts_with("rewrite rejected (document):")
+    }));
+    assert_eq!(r.fixed, None);
+    assert_eq!(r.metrics_before, Some(expected.clone()));
+    assert_eq!(r.metrics, expected);
+}
