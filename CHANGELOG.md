@@ -2,6 +2,10 @@
 
 ## 0.2.0 (unreleased)
 
+- Added a lazy, cached prose tagger. SLP006 now safely fixes sentence-initial determiner/noun subjects,
+  optionally with one adjective, when all subject tags are certain and agreement and clause guards hold.
+  Ambiguous subjects and idioms remain report-only; existing pronoun and modal fixes are unchanged.
+
 - Verification now checks dropped negations, capitalised non-sentence-initial words as a proxy for names, and
   modal-verb multisets (including normalised contractions). SLP901 names failures as `negation`, `properNouns`
   or `modals`; rejected edits leave the original bytes intact.

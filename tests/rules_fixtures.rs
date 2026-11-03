@@ -324,6 +324,16 @@ fn safe_fix_contexts_grammatical() {
         (6, "It serves as a bridge.\n", "It is a bridge.\n"),
         (
             6,
+            "The library serves as a guide.\n",
+            "The library is a guide.\n",
+        ),
+        (
+            6,
+            "The main library serves as a guide.\n",
+            "The main library is a guide.\n",
+        ),
+        (
+            6,
             "A cache, which functions as a buffer, is small.\n",
             "A cache, which is a buffer, is small.\n",
         ),
@@ -359,6 +369,10 @@ fn safe_fix_contexts_grammatical() {
         (6, "They served as mentors.\n"),
         (6, "Both serve as anchors.\n"),
         (6, "The tool serves as a bridge.\n"),
+        (6, "Export the library functions as a module.\n"),
+        (6, "The library functions as a module are deprecated.\n"),
+        (6, "The library serves as a whole.\n"),
+        (6, "The fast library serves as a guide.\n"),
         (6, "Please export these functions as a module.\n"),
         (6, "We expose helper functions as a convenience.\n"),
         (6, "It functions as follows.\n"),

@@ -186,3 +186,58 @@ pub fn detect(
     out.sort_by_key(|f| (f.range.start, f.code));
     out
 }
+
+#[cfg(test)]
+mod tests {
+    use super::registry::Registry;
+    use super::*;
+    use crate::directives::Suppressions;
+    use crate::doc::{self, Format, ProtectSettings};
+    use std::sync::Arc;
+    use std::sync::atomic::Ordering;
+
+    fn enabled(code: u16) -> Enabled<'static> {
+        let rule = Registry::builtin()
+            .get(RuleCode(code))
+            .unwrap_or_else(|| panic!("SLP{code:03}"));
+        Enabled {
+            rule,
+            severity: rule.meta().severity,
+            params: rule
+                .meta()
+                .params
+                .iter()
+                .map(|p| (p.name, p.default))
+                .collect(),
+        }
+    }
+
+    fn runs(src: &str) -> u32 {
+        let d = doc::parse(
+            Arc::from(src),
+            Format::Markdown,
+            &ProtectSettings::default(),
+        );
+        let prose = Prose::new(&d);
+        let _ = detect(
+            &d,
+            &prose,
+            &Suppressions::default(),
+            &[enabled(4), enabled(6)],
+        );
+        prose.tag_runs.load(Ordering::Relaxed)
+    }
+
+    #[test]
+    fn tagging_runs_once_per_pass() {
+        assert_eq!(
+            runs("The library serves as a guide. It is not only cheap but also quick.\n"),
+            1
+        );
+    }
+
+    #[test]
+    fn no_candidate_no_tagging() {
+        assert_eq!(runs("Plain prose with nothing to fix.\n"), 0);
+    }
+}

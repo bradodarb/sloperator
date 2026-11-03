@@ -246,7 +246,12 @@ fn model_windows(
     };
     // The end of the last window sent: a window that overlaps it (a sentence window over two sentences) is skipped.
     let mut sent_to = 0;
-    for plan in windows(doc, prose, findings, frozen, s) {
+    #[cfg(test)]
+    let scans0 = crate::text::segment::scans();
+    let plans = windows(doc, prose, findings, frozen, s);
+    #[cfg(test)]
+    PLAN_SCANS.with(|p| p.borrow_mut().push(crate::text::segment::scans() - scans0));
+    for plan in plans {
         let w = match plan {
             WindowPlan::Rewrite(w) if w.range.start >= sent_to => w,
             WindowPlan::Rewrite(w) => {
@@ -325,8 +330,19 @@ fn detect_in(text: Arc<str>, source: &Source) -> Result<Detected, Error> {
     };
     let reg = Registry::builtin();
     let sup = directives::extract(&mut d, &path, reg)?;
+    #[cfg(test)]
+    let scans0 = crate::text::segment::scans();
     let prose = Prose::new(&d);
     let findings = rules::detect(&d, &prose, &sup, &s.enabled(reg));
+    #[cfg(test)]
+    PASSES.with(|p| {
+        p.borrow_mut().push(Pass {
+            text: Arc::clone(&d.src),
+            blocks: d.blocks.len(),
+            scans: crate::text::segment::scans() - scans0,
+            tag_runs: prose.tag_runs.load(Ordering::Relaxed),
+        });
+    });
     Ok((d, prose, sup, findings))
 }
 
@@ -402,4 +418,131 @@ fn locate(d: &Document, findings: Vec<Finding>) -> Vec<Located> {
             }
         })
         .collect()
+}
+
+#[cfg(test)]
+use std::cell::RefCell;
+#[cfg(test)]
+use std::sync::atomic::Ordering;
+
+/// One detection pass, as `detect_in` saw it (NFR-2 test hook).
+#[cfg(test)]
+struct Pass {
+    text: Arc<str>,
+    blocks: usize,
+    scans: u32,
+    tag_runs: u32,
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Every detection pass this thread ran, in order.
+    static PASSES: RefCell<Vec<Pass>> = const { RefCell::new(Vec::new()) };
+    /// The block scans each `windows` call in `model_windows` ran.
+    static PLAN_SCANS: RefCell<Vec<u32>> = const { RefCell::new(Vec::new()) };
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use super::*;
+    use crate::config::{CliOverrides, ModelSettings, Resolver, WindowMode};
+    use crate::input::Format;
+    use crate::model::ResolvedModel;
+
+    /// Rewrites each sentence window's tell to plain wording, so every window improves and is applied.
+    struct Plain;
+    impl engine::Rewriter for Plain {
+        fn rewrite(&mut self, req: &engine::RewriteRequest<'_>) -> Result<String, Error> {
+            Ok(req
+                .window
+                .replace("plays a crucial role in", "helps")
+                .replace("plays a vital role in", "helps")
+                .replace("plays a pivotal role in", "helps")
+                .replace("serves as", "is"))
+        }
+    }
+    struct PlainFactory;
+    impl engine::RewriterFactory for PlainFactory {
+        fn open(&self, _: &ResolvedModel) -> Result<Box<dyn engine::Rewriter>, Error> {
+            Ok(Box::new(Plain))
+        }
+    }
+
+    /// NFR-2 / FR-7.3 (Gap 9): a sentence-mode fix with three windows in one paragraph. Each document pass — the
+    /// original, each candidate parsed for the improvement check, the final text — builds one `Prose`: it scans
+    /// each block once and tags at most once. Window planning scans nothing. The tool sentence (an SLP006 hit the
+    /// tagger declines, so a fix-less Safe finding) makes the original pass tag once; the final text has no
+    /// candidate left and is never tagged.
+    #[test]
+    fn multi_window_fix_analyses_each_pass_once() {
+        PASSES.with(|p| p.borrow_mut().clear());
+        PLAN_SCANS.with(|p| p.borrow_mut().clear());
+        let tmp = tempfile::tempdir().unwrap();
+        let model = tmp.path().join("model.gguf");
+        std::fs::write(&model, b"not a real model").unwrap();
+        let path = tmp.path().join("doc.md");
+        let mut settings = (*Resolver::new(CliOverrides::default(), None)
+            .unwrap()
+            .for_file(&path)
+            .unwrap())
+        .clone();
+        settings.model.window = WindowMode::Sentence;
+        let ms = ModelSettings {
+            path: Some(model),
+            profile: Some("qwen3".into()),
+            ..settings.model.clone()
+        };
+        let text = "The cache plays a crucial role in builds and plays a vital role in tests. The index plays a \
+                    pivotal role in search and plays a crucial role in ranking. The tool serves as a bridge.\n";
+        let source = Source {
+            origin: Origin::File(path),
+            format: Format::Markdown,
+            text: Arc::from(text),
+            settings: Arc::new(settings),
+        };
+        let factory = PlainFactory;
+        let mut rw = engine::LazyRewriter::new(&factory, &ms).unwrap();
+        let both = Engines {
+            rules: true,
+            model: true,
+        };
+        let r = fix(
+            analyse(source).unwrap(),
+            both,
+            Some(&mut rw),
+            engine::DEFAULT_SEED,
+        )
+        .unwrap();
+        assert!(r.fixed.is_some(), "{:?}", r.findings);
+
+        let passes = PASSES.with(|p| p.take());
+        let plans = PLAN_SCANS.with(|p| p.take());
+        assert_eq!(plans, vec![0], "window planning rescanned a block");
+        // The original pass, three candidates and the final text: no step-1 pass (no safe fix applies).
+        assert_eq!(
+            passes.len(),
+            5,
+            "passes: {:?}",
+            passes.iter().map(|p| &*p.text).collect::<Vec<_>>()
+        );
+        assert_eq!(&*passes[0].text, text);
+        for p in &passes {
+            assert_eq!(
+                p.scans as usize, p.blocks,
+                "a pass scanned a block twice: {:?}",
+                p.text
+            );
+            assert!(p.tag_runs <= 1, "a pass tagged twice: {:?}", p.text);
+        }
+        assert_eq!(
+            passes[0].tag_runs, 1,
+            "the SLP006 hit must tag the original pass"
+        );
+        assert_eq!(
+            passes[4].tag_runs, 0,
+            "the final text has no candidate and must not be tagged"
+        );
+    }
 }

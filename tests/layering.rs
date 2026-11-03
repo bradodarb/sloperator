@@ -279,3 +279,8 @@ fn segmentation_runs_only_inside_prose() {
 fn sentence_scan_only_in_segmenter() {
     only_in(&["split_sentence_bound_indices"], "src/text/segment.rs");
 }
+
+#[test]
+fn tagger_runs_only_inside_prose() {
+    only_in(&["tagger::tag("], "src/text/mod.rs");
+}
