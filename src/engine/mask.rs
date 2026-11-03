@@ -77,7 +77,7 @@ pub fn mask(doc: &Document, block: BlockId, range: Range<usize>) -> (String, Vec
             }
             SpanKind::Protected(reason) => {
                 if r.start > range.start && src.as_bytes()[r.start - 1] == b'\n' {
-                    r.start += prefix_len(doc, r.start, range.end);
+                    r.start += doc.continuation_prefix_len(r.start, range.end);
                 }
                 let text = &src[r.clone()];
                 let breaks_after =
@@ -100,20 +100,6 @@ pub fn mask(doc: &Document, block: BlockId, range: Range<usize>) -> (String, Vec
     }
     flush(&mut run, &mut out, &mut slots);
     (out, slots)
-}
-
-/// The container prefix at line start `ls`: the leading spaces, tabs and `>` that are block markup (not prose), up
-/// to `end`.
-pub(crate) fn prefix_len(doc: &Document, ls: usize, end: usize) -> usize {
-    let bytes = doc.src.as_bytes();
-    let mut i = ls;
-    while i < end.min(bytes.len())
-        && matches!(bytes[i], b' ' | b'\t' | b'>')
-        && doc.is_protected(&(i..i + 1))
-    {
-        i += 1;
-    }
-    i - ls
 }
 
 /// The output contract (FR-9.3), then unmasking (ADR-04). Applied in order:
