@@ -624,6 +624,10 @@ fn rejects_param_above_maximum() {
     let (_, key, reason) = config_error(&path);
     assert_eq!(key, "rules.SLP018.max_grade");
     assert!(reason.contains("30"), "{reason}");
+    write(&path, "[rules.SLP021]\nmin_ttr = 2\n");
+    let (_, key, reason) = config_error(&path);
+    assert_eq!(key, "rules.SLP021.min_ttr");
+    assert!(reason.contains("maximum is 1"), "{reason}");
 }
 
 #[test]

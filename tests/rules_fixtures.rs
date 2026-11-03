@@ -199,6 +199,9 @@ rule_fixtures!(
         slp017_fix_matches
     ),
     model(18, slp018_positive_fires, slp018_negative_silent),
+    model(19, slp019_positive_fires, slp019_negative_silent),
+    model(20, slp020_positive_fires, slp020_negative_silent),
+    model(21, slp021_positive_fires, slp021_negative_silent),
 );
 
 #[test]
