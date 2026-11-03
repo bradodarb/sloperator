@@ -202,6 +202,7 @@ rule_fixtures!(
     model(19, slp019_positive_fires, slp019_negative_silent),
     model(20, slp020_positive_fires, slp020_negative_silent),
     model(21, slp021_positive_fires, slp021_negative_silent),
+    model(22, slp022_positive_fires, slp022_negative_silent),
 );
 
 #[test]
@@ -633,4 +634,40 @@ fn metric_rule_silent_when_unavailable() {
     let prose = sloperator::text::Prose::new(&doc);
     assert_eq!(prose.counts(&doc).sentences, 3);
     assert!(findings(18, &doc).is_empty());
+}
+
+#[test]
+fn slp022_reports_all_twelve_intensifiers_without_fixes() {
+    let doc = parse(&read(22, "positive.md"));
+    let found = findings(22, &doc);
+    let mut words: Vec<_> = found
+        .iter()
+        .map(|f| doc.src[f.range.clone()].to_lowercase())
+        .collect();
+    words.sort();
+    assert_eq!(
+        words,
+        [
+            "absolutely",
+            "actually",
+            "basically",
+            "extremely",
+            "highly",
+            "incredibly",
+            "literally",
+            "quite",
+            "really",
+            "totally",
+            "truly",
+            "very"
+        ]
+    );
+    for f in found {
+        let word = &doc.src[f.range.clone()];
+        assert_eq!(
+            f.message,
+            format!("`{word}` adds emphasis, not meaning; consider deleting it")
+        );
+        assert!(f.fix.is_none());
+    }
 }
