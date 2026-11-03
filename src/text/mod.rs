@@ -2,7 +2,7 @@
 //!
 //! Build one owned `Prose` per document pass. Segmentation eagerly caches each block's sentence bounds and
 //! every prose word; consumers can query ranges without scanning again. Pair it with its original document.
-//! Only segmentation is available here so far; production consumers are wired in the next story.
+//! The pipeline builds it after directive extraction; rules and model windows share its cached segmentation.
 
 use crate::doc::Document;
 

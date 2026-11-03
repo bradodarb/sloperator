@@ -8,6 +8,7 @@ use std::ops::Range;
 
 use crate::doc::{BlockText, Document};
 
+use crate::text::Prose;
 use crate::types::ProposalOrigin;
 pub use crate::types::{Proposal, RuleCode}; // re-exported so callers keep writing `rules::RuleCode` (Gap 3)
 
@@ -83,6 +84,7 @@ pub struct RuleMeta {
 /// What a rule sees: prose only (FR-4.4), its resolved params, the prose word count (FR-4.3).
 pub struct RuleCtx<'a> {
     pub doc: &'a Document,
+    pub prose: &'a Prose,
     pub params: &'a BTreeMap<&'static str, f64>,
     pub severity: Severity,
 }
@@ -157,6 +159,7 @@ pub struct Enabled<'a> {
 /// never suppressed (`Suppressions::is_suppressed`).
 pub fn detect(
     doc: &Document,
+    prose: &Prose,
     sup: &crate::directives::Suppressions,
     rules: &[Enabled<'_>],
 ) -> Vec<Finding> {
@@ -164,6 +167,7 @@ pub fn detect(
     for enabled in rules {
         let ctx = RuleCtx {
             doc,
+            prose,
             params: &enabled.params,
             severity: enabled.severity,
         };

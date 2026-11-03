@@ -5,7 +5,7 @@ use std::ops::Range;
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder, Input, MatchKind};
 use pulldown_cmark::{Event, Options, Parser};
 
-use crate::doc::{BlockText, Document, Format, OBJ, SpanKind};
+use crate::doc::{BlockText, Document, Format, SpanKind};
 
 type Entry = (&'static str, Option<&'static str>);
 
@@ -135,26 +135,7 @@ impl PatternRule {
     }
 }
 
-/// Whether the text byte `at` starts a sentence: only whitespace before it, or `.`, `!` or `?` is the nearest
-/// character before it. A non-prose run ([`OBJ`]) at the start of a line is block markup (`# `, `- `, `> `), so it
-/// is skipped. One in the middle of a line is not, so a phrase after inline code or a link is not sentence-initial.
-pub fn starts_sentence(text: &str, at: usize) -> bool {
-    let mut before = text.get(..at).unwrap_or_default();
-    loop {
-        before = before.trim_end();
-        if before.is_empty() {
-            return true;
-        }
-        if !before.ends_with(OBJ) {
-            return before.ends_with(['.', '!', '?']);
-        }
-        let line = before.trim_end_matches(OBJ).trim_end_matches([' ', '\t']);
-        if !(line.is_empty() || line.ends_with('\n')) {
-            return false;
-        }
-        before = line;
-    }
-}
+pub use crate::text::segment::starts_sentence;
 
 /// The safe fix for a lead-in phrase (SLP008, SLP016): delete `lead` (a text range that includes the whitespace after
 /// it) and capitalise the next letter. Returns the source range to replace and its replacement.

@@ -4,6 +4,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
+use sloperator::text::Prose;
+
 use sloperator::directives::Suppressions;
 use sloperator::doc::{self, Document, Format, ProtectSettings};
 use sloperator::rules::helpers::WordList;
@@ -74,10 +76,11 @@ fn detect_skips_protected_and_suppressed() {
     // line 1: prose foo + code foo; line 3: foo on a suppressed line; line 5: prose foo.
     let src = "foo `foo`\n\nfoo\n\nfoo\n";
     let d = md(src);
+    let prose = Prose::new(&d);
     let line3 = d.line_range(3);
     let sup = Suppressions::default().with_lines(3..4, None, line3);
     let rule = FooEverywhere::new(1);
-    let found = detect(&d, &sup, &[enabled(&rule)]);
+    let found = detect(&d, &prose, &sup, &[enabled(&rule)]);
     let starts: Vec<usize> = found.iter().map(|f| f.range.start).collect();
     assert_eq!(
         starts,
@@ -90,17 +93,23 @@ fn detect_skips_protected_and_suppressed() {
 fn detect_suppresses_only_named_codes_and_never_system_codes() {
     let src = "foo\n";
     let d = md(src);
+    let prose = Prose::new(&d);
     let named: BTreeSet<RuleCode> = [RuleCode(1)].into();
     let sup = Suppressions::default().with_lines(1..2, Some(named), d.line_range(1));
     let one = FooEverywhere::new(1);
     let two = FooEverywhere::new(2);
     let sys = FooEverywhere::new(901);
-    let found = detect(&d, &sup, &[enabled(&one), enabled(&two), enabled(&sys)]);
+    let found = detect(
+        &d,
+        &prose,
+        &sup,
+        &[enabled(&one), enabled(&two), enabled(&sys)],
+    );
     let codes: Vec<RuleCode> = found.iter().map(|f| f.code).collect();
     assert_eq!(codes, vec![RuleCode(2), RuleCode(901)]);
 
     let all = Suppressions::default().with_file_ignored();
-    let codes: Vec<RuleCode> = detect(&d, &all, &[enabled(&one), enabled(&sys)])
+    let codes: Vec<RuleCode> = detect(&d, &prose, &all, &[enabled(&one), enabled(&sys)])
         .iter()
         .map(|f| f.code)
         .collect();
@@ -114,9 +123,15 @@ fn detect_suppresses_only_named_codes_and_never_system_codes() {
 #[test]
 fn detect_sorts_by_start_then_code() {
     let d = md("foo foo\n");
+    let prose = Prose::new(&d);
     let a = FooEverywhere::new(7);
     let b = FooEverywhere::new(3);
-    let found = detect(&d, &Suppressions::default(), &[enabled(&a), enabled(&b)]);
+    let found = detect(
+        &d,
+        &prose,
+        &Suppressions::default(),
+        &[enabled(&a), enabled(&b)],
+    );
     let keys: Vec<(usize, u16)> = found.iter().map(|f| (f.range.start, f.code.0)).collect();
     assert_eq!(keys, vec![(0, 3), (0, 7), (4, 3), (4, 7)]);
 }

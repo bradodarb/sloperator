@@ -10,6 +10,8 @@ mod common;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use sloperator::text::Prose;
+
 use common::fixture;
 use sloperator::directives::Suppressions;
 use sloperator::doc::{self, Document, Format, ProtectSettings};
@@ -50,7 +52,8 @@ fn findings(code: u16, d: &Document) -> Vec<Finding> {
             .map(|p| (p.name, p.default))
             .collect(),
     };
-    detect(d, &Suppressions::default(), &[enabled])
+    let prose = Prose::new(d);
+    detect(d, &prose, &Suppressions::default(), &[enabled])
 }
 
 fn fix_class(code: u16) -> FixClass {

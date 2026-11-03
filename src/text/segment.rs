@@ -5,7 +5,7 @@ use std::ops::Range;
 
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::doc::{BlockId, Document, SpanKind};
+use crate::doc::{BlockId, Document, OBJ, SpanKind};
 
 /// One sentence of one block. `range` is its source bytes with surrounding whitespace trimmed (trimmed on the
 /// blanked copy, so a continuation prefix such as `> ` is never inside it); `words` indexes [`Segments::words`]. A
@@ -219,6 +219,27 @@ pub fn segment(doc: &Document) -> Segments {
         sentences,
         words,
         bounds,
+    }
+}
+
+/// Whether the text byte `at` starts a sentence: only whitespace before it, or `.`, `!` or `?` is the nearest
+/// character before it. A non-prose run ([`OBJ`]) at the start of a line is block markup (`# `, `- `, `> `), so it
+/// is skipped. One in the middle of a line is not, so a phrase after inline code or a link is not sentence-initial.
+pub fn starts_sentence(text: &str, at: usize) -> bool {
+    let mut before = text.get(..at).unwrap_or_default();
+    loop {
+        before = before.trim_end();
+        if before.is_empty() {
+            return true;
+        }
+        if !before.ends_with(OBJ) {
+            return before.ends_with(['.', '!', '?']);
+        }
+        let line = before.trim_end_matches(OBJ).trim_end_matches([' ', '\t']);
+        if !(line.is_empty() || line.ends_with('\n')) {
+            return false;
+        }
+        before = line;
     }
 }
 
