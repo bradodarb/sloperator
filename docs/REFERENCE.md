@@ -268,6 +268,10 @@ front_matter = true
 math = true
 html = true
 
+[metrics]
+min_sentences = 5                       # positive integer; default 5
+min_words = 100                         # positive integer; default 100
+
 [model]
 name = "qwen3-4b"
 path = "/models/my.gguf"               # relative paths resolve against this file; requires `profile`
@@ -287,6 +291,10 @@ seed = 42
   At each layer the rule set is `select` (when present, it replaces the set), plus `extend_select`, minus `ignore`.
   The defaults are the registry's default set at each rule's own severity and param defaults, `min_severity`
   `warning`, model `qwen3-4b`, window `paragraph`, `max_window_chars` 4000, `max_tokens` 0 and seed 42.
+- **Metric floors.** `[metrics]` is top-level only and inherits each omitted value through `extend`.
+  Both values must be integers at least 1; unknown keys and invalid values name `metrics.<key>` in the error.
+  `Settings.metrics` holds the resolved floors. `Resolver::run_floors(cwd)` uses the explicit `--config` chain,
+  else the nearest config above `cwd`, else 5 sentences and 100 words.
 - **Errors (FR-7.6).** Each of these is `Error::Config { file, key, reason }` with a dotted key such as
   `rules.SLP014.max_per_1000_words`, `per_file[0].glob` or `protect.patterns[1]`: a TOML syntax error (key
   `(syntax)`), an unknown key, a wrong type, an unknown or system rule code, an unknown or non-numeric rule

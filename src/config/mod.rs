@@ -17,6 +17,7 @@ pub use file::WindowMode;
 use crate::Error;
 use crate::rules::registry::Registry;
 use crate::rules::{Enabled, RuleCode, Severity};
+use crate::text::metrics::Floors;
 use file::{Loaded, config_err};
 
 /// The name discovery looks for in each directory, upward from the input file's directory (FR-7.1).
@@ -63,6 +64,7 @@ pub struct Settings {
     pub respect_gitignore: bool,
     pub protect: ProtectSettings,
     pub model: ModelSettings,
+    pub metrics: Floors,
 }
 
 impl Settings {
@@ -249,6 +251,21 @@ impl Resolver {
         Ok(Arc::new(s))
     }
 
+    /// The run's metric floors: explicit config, nearest config above cwd, or built-in defaults.
+    ///
+    /// # Errors
+    /// A config chain that cannot be read or contains invalid settings.
+    pub fn run_floors(&mut self, cwd: &Path) -> Result<Floors, Error> {
+        let chain = match &self.explicit {
+            Some(c) => c.clone(),
+            None => match self.discover(&absolute(cwd)) {
+                Some(p) => self.chain_of(&p)?,
+                None => self.defaults()?,
+            },
+        };
+        Ok(chain.base.metrics)
+    }
+
     fn cli_is_empty(&self) -> bool {
         self.cli.select.is_none()
             && self.cli.extend_select.is_empty()
@@ -316,6 +333,7 @@ fn build(
     let mut exclude: Vec<String> = Vec::new();
     let mut respect_gitignore = true;
     let mut protect = ProtectSettings::default();
+    let mut metrics = Floors::default();
     let mut model = ModelSettings {
         name: DEFAULT_MODEL_NAME.to_string(),
         path: None,
@@ -409,6 +427,14 @@ fn build(
             )
             .map_err(|e| config_err(p, "protect.patterns", &e.to_string()))?;
         }
+        if let Some(m) = &f.metrics {
+            if let Some(v) = m.min_sentences {
+                metrics.sentences = v.get();
+            }
+            if let Some(v) = m.min_words {
+                metrics.words = v.get();
+            }
+        }
         if let Some(m) = &f.model {
             if let Some(v) = &m.name {
                 model.name = v.clone();
@@ -459,6 +485,7 @@ fn build(
         respect_gitignore,
         protect,
         model,
+        metrics,
     };
     Ok(Chain {
         base: Arc::new(base),
