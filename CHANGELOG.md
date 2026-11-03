@@ -2,6 +2,11 @@
 
 ## 0.2.0 (unreleased)
 
+- SLP003 and SLP004 now use Safe-class template fixes in proven contexts. SLP003 deletes short plain denials
+  with matching subjects in one sentence; `max_words` defaults to 3 (bounds 1–10). Additive frames stay unfixed.
+  SLP004 joins certain single-word pairs as “X and Y”. Other matches may still be rewritten by the model,
+  even though JSON `fix.available` is false when no deterministic fix is attached. The JSON schema is unchanged.
+
 - Added a lazy, cached prose tagger. SLP006 now safely fixes sentence-initial determiner/noun subjects,
   optionally with one adjective, when all subject tags are certain and agreement and clause guards hold.
   Ambiguous subjects and idioms remain report-only; existing pronoun and modal fixes are unchanged.

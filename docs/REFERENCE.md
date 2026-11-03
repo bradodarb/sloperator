@@ -249,8 +249,14 @@ config values fail with the dotted key. CLI and MCP rule explanations expose the
   Every other form fires with no fix. Tags are computed lazily once per document pass.
 - Pattern and residue rules (`builtin/slp003_*` … `slp015_*`), all on by default in v0.1.0. Each is a `PatternRule`
   over the prose of a block, so a match never crosses code or a link.
-  - SLP003 `not-x-but-y` and SLP004 `not-just-but-also` (negative parallelism), SLP007 `significance-puffery` and
-    SLP015 `ai-disclaimer` (chatbot residue) are fix class `Model`: they report and attach no fix.
+  - SLP004 `not-just-but-also` is `Safe`: it joins single words as "X and Y" only when both have the same
+    certain content-word tag, Y ends the clause and the pair lies within one sentence. Other matches carry
+    no fix and select a model window. A leading "Not" capitalises X; ambiguous words such as "fast" decline.
+  - SLP003 `not-x-but-y` is `Safe`: in one sentence with matching subjects it deletes the denied clause,
+    keeping the second clause's case except at a sentence start. X and Y must each have at most `max_words`
+    words (default 3, bounds 1–10). Capitalised words, digits or protected runs in X decline, as do additive
+    frames beginning with even/just/merely/only/simply/solely. Other matches select a model window without a fix.
+  - SLP007 `significance-puffery` and SLP015 `ai-disclaimer` remain `Model`: they report and attach no fix.
   - SLP005 `rule-of-three` is `Model`. It counts triads "A, B(,) and C" of items of 1-3 words and reports every one
     only when the count per 1,000 prose words is above its param `max_per_1000_words` (default 4).
   - SLP012 `chatbot-closer` (severity `error`, `Safe`) matches a whole sentence ("I hope this helps!", "Let me know if
@@ -464,7 +470,8 @@ overall word-weighted score, metrics derived from merged file counts with the ru
   and `summary` (including `metrics`). The additive metrics keys keep `schemaVersion` at 1 and preserve the score shape. Every finding carries its own
   `path`, plus `code`, `name`, `severity`, `start`/`end` (`line`, `column`), `message`, `matched` and
   `fix: {available, class}`. `available` is true for a safe-class finding with a fix attached and for every
-  model-class finding. The system codes are named `rewrite-rejected` and `window-skipped`, class `none`. A code that
+  model-class finding. For SLP003/SLP004, `fix.available` is false on an unfixed Safe-class match even though
+  the model may still rewrite it. The system codes are named `rewrite-rejected` and `window-skipped`, class `none`. A code that
   is neither a built-in rule nor a system code fails the render with an error.
 - **github:** `::warning file=…,line=…,col=…,endLine=…,endColumn=…,title=SLP001 <name>::message`. Suggestion maps to
   `notice`, warning to `warning`, error to `error`. `gh_escape(s, property)` escapes `%`, `\r` and `\n` in the

@@ -50,8 +50,8 @@ fn every_rule_has_code_name_severity_state_fix() {
     let catalogue: BTreeMap<u16, (Severity, FixClass)> = [
         (1, (Warning, Safe)),
         (2, (Suggestion, Model)),
-        (3, (Warning, Model)),
-        (4, (Warning, Model)),
+        (3, (Warning, Safe)),
+        (4, (Warning, Safe)),
         (5, (Suggestion, Model)),
         (6, (Warning, Safe)),
         (7, (Warning, Model)),
@@ -242,4 +242,22 @@ fn slp022_is_detection_only() {
     assert_eq!(meta.since, "0.2.0");
     assert!(meta.params.is_empty());
     assert!(meta.explain.contains("verifier does not check strength"));
+}
+
+#[test]
+fn slp007_slp015_unchanged() {
+    for (code, explain) in [
+        (
+            7,
+            "Flags \"plays a crucial/pivotal/vital role\", \"underscores the importance\", \"a testament to\" and \"marks a significant milestone\". Each says a thing matters without saying why. No rewrite is safe, so the model engine replaces the claim with the fact.",
+        ),
+        (
+            15,
+            "Flags \"As of my last (knowledge) update\" and \"As an AI language model\". The speaker is a model talking about itself, which does not belong in a document. Whether the sentence survives depends on its claim, so the model engine rewrites it.",
+        ),
+    ] {
+        let meta = Registry::builtin().get(RuleCode(code)).unwrap().meta();
+        assert_eq!(meta.fix, FixClass::Model);
+        assert_eq!(meta.explain, explain);
+    }
 }

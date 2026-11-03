@@ -143,8 +143,18 @@ rule_fixtures!(
         slp001_fix_matches
     ),
     model(2, slp002_positive_fires, slp002_negative_silent),
-    model(3, slp003_positive_fires, slp003_negative_silent),
-    model(4, slp004_positive_fires, slp004_negative_silent),
+    safe(
+        3,
+        slp003_positive_fires,
+        slp003_negative_silent,
+        slp003_fix_matches
+    ),
+    safe(
+        4,
+        slp004_positive_fires,
+        slp004_negative_silent,
+        slp004_fix_matches
+    ),
     model(5, slp005_positive_fires, slp005_negative_silent),
     safe(
         6,
@@ -234,6 +244,46 @@ fn one_finding(code: u16, src: &str) -> (Document, Finding) {
     let mut found = findings(code, &d);
     assert_eq!(found.len(), 1, "{found:?}");
     (d, found.remove(0))
+}
+
+#[test]
+fn slp004_declines_when_y_continues() {
+    let (_, f) = one_finding(4, "It is not only cheap but also quick tools.\n");
+    assert!(f.fix.is_none());
+}
+
+#[test]
+fn slp004_declines_across_sentences() {
+    let src = "It is not only cheap. But also quick.\n";
+    assert!(findings(4, &parse(src)).iter().all(|f| f.fix.is_none()));
+    assert_eq!(apply_fixes(4, src), src);
+}
+
+#[test]
+fn slp004_capitalises_leading_not() {
+    assert_eq!(
+        apply_fixes(4, "Not just cheap but also quick.\n"),
+        "Cheap and quick.\n"
+    );
+}
+
+#[test]
+fn slp004_ambiguous_pair_selects_model_window() {
+    let (d, f) = one_finding(4, "The tool is not just fast, but also simple.\n");
+    assert!(f.fix.is_none());
+    let prose = Prose::new(&d);
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("no-config-here/doc.md");
+    let settings =
+        sloperator::config::Resolver::new(sloperator::config::CliOverrides::default(), None)
+            .unwrap()
+            .for_file(&path)
+            .unwrap();
+    let plans = sloperator::engine::window::windows(&d, &prose, &[f], &[], &settings);
+    assert_eq!(plans.len(), 1);
+    assert!(matches!(
+        plans[0],
+        sloperator::engine::window::WindowPlan::Rewrite(_)
+    ));
 }
 
 #[test]
@@ -715,4 +765,91 @@ fn slp008_preserves_modal_in_should_preamble() {
     assert_eq!(found.len(), 1);
     assert!(found[0].fix.is_none());
     assert_eq!(apply_fixes(8, &d.src), d.src.as_ref());
+}
+
+#[test]
+fn slp003_declines_on_long_x_or_other_subject() {
+    for src in [
+        "It's not a bug that we can fix in an hour, it's a feature.\n",
+        "This isn't a framework — it's a mindset.\n",
+        "It's not a rule. It's a habit.\n",
+    ] {
+        let (_, f) = one_finding(3, src);
+        assert!(f.fix.is_none(), "{src}");
+        assert_eq!(apply_fixes(3, src), src);
+    }
+}
+
+#[test]
+fn slp003_mid_sentence_keeps_case() {
+    assert_eq!(
+        apply_fixes(3, "I think it's not a bug, it's a feature.\n"),
+        "I think it's a feature.\n"
+    );
+}
+
+#[test]
+fn slp003_declines_additive_frame() {
+    for focus in ["even", "just", "merely", "only", "simply", "solely"] {
+        let src = format!("It's not {focus} cheap, it's quick.\n");
+        let (_, f) = one_finding(3, &src);
+        assert!(f.fix.is_none(), "{src}");
+        assert_eq!(apply_fixes(3, &src), src);
+    }
+    assert_eq!(
+        apply_fixes(3, "It's not a bug, it's a feature.\n"),
+        "It's a feature.\n"
+    );
+}
+
+#[test]
+fn slp003_max_words_config_limit() {
+    use sloperator::config::{CliOverrides, Resolver};
+    let tmp = tempfile::tempdir().unwrap();
+    let config = tmp.path().join("sloperator.toml");
+    std::fs::write(&config, "[rules.SLP003]\nmax_words = 11\n").unwrap();
+    let result = Resolver::new(CliOverrides::default(), Some(&config))
+        .and_then(|mut r| r.for_file(&tmp.path().join("doc.md")));
+    assert!(result.is_err());
+}
+
+#[test]
+fn slp003_additive_rules_only_unchanged() {
+    use sloperator::config::{CliOverrides, Resolver};
+    use sloperator::input::{Origin, Source};
+    use sloperator::pipeline::{self, Engines};
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("doc.md");
+    for src in [
+        "It's not only cheap, it's quick.\n",
+        "It's not just cheap, it's quick.\n",
+    ] {
+        let settings = Resolver::new(CliOverrides::default(), None)
+            .unwrap()
+            .for_file(&path)
+            .unwrap();
+        let source = Source {
+            origin: Origin::File(path.clone()),
+            format: Format::Markdown,
+            text: Arc::from(src),
+            settings,
+        };
+        let result = pipeline::fix(
+            pipeline::analyse(source).unwrap(),
+            Engines {
+                rules: true,
+                model: false,
+            },
+            None,
+            sloperator::engine::DEFAULT_SEED,
+        )
+        .unwrap();
+        assert!(result.fixed.is_none(), "{src}");
+        assert!(
+            result
+                .findings
+                .iter()
+                .any(|f| f.finding.code == RuleCode(3) && f.finding.fix.is_none())
+        );
+    }
 }
