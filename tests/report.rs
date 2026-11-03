@@ -71,6 +71,9 @@ fn result(path: &str, findings: Vec<Located>) -> FileResult {
         },
         score_before: None,
         fixed: None,
+        metrics: sloperator::text::Counts::default(),
+        metrics_before: None,
+        floors: sloperator::text::Floors::default(),
     }
 }
 

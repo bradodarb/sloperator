@@ -40,4 +40,4 @@
 
 `text_metrics` uses a temp-dir source so no checkout config applies (tests/pipeline.rs:25-37).
 
-Gate: `make -f "$AEGIS_DIR/Makefile" test UNIT=sloperator TESTS='text_metrics#fix_reports_before_and_after sloperator::pipeline sloperator::write'`
+Gate: `make -f "$AEGIS_DIR/Makefile" test UNIT=sloperator TESTS='sloperator::text_metrics#fix_reports_before_and_after sloperator::pipeline sloperator::write'`
