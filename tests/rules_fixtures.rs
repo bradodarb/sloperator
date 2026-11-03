@@ -202,6 +202,7 @@ rule_fixtures!(
     model(19, slp019_positive_fires, slp019_negative_silent),
     model(20, slp020_positive_fires, slp020_negative_silent),
     model(21, slp021_positive_fires, slp021_negative_silent),
+    model(22, slp022_positive_fires, slp022_negative_silent),
 );
 
 #[test]
@@ -332,6 +333,23 @@ fn safe_fix_contexts_grammatical() {
             "It can also be a guide.\n",
         ),
         (1, "She leveraged the API.\n", "She used the API.\n"),
+        (1, "We make a decision about it.\n", "We decide about it.\n"),
+        (
+            1,
+            "They made a decision to leave.\n",
+            "They decided to leave.\n",
+        ),
+        (
+            1,
+            "We reached a conclusion before noon.\n",
+            "We concluded before noon.\n",
+        ),
+        (1, "At this point in time, we stop.\n", "Now, we stop.\n"),
+        (
+            1,
+            "We stayed due to the fact that it rained.\n",
+            "We stayed because it rained.\n",
+        ),
     ];
     for (code, src, want) in fixed {
         assert_eq!(apply_fixes(code, src), want, "{src:?}");
@@ -359,6 +377,68 @@ fn safe_fix_contexts_grammatical() {
         assert!(!found.is_empty(), "no finding for {src:?}");
         assert!(found.iter().all(|f| f.fix.is_none()), "{src:?}: {found:?}");
         assert_eq!(apply_fixes(code, src), src);
+    }
+}
+
+const GUARD_COUNTER_CONTEXTS: &[&str] = &[
+    "We make a decision tree.",
+    "They made a decision table.",
+    "We made a decision that surprised us.",
+    "The delay is due to the fact that we left.",
+    "It's due to the fact that we left.",
+    "There is a sufficient number of seats.",
+    "We met in the event that ran in May.",
+    "We reached a conclusion with which everyone agreed.",
+    "We made a decision about which everyone complained.",
+    "We made a decision with consequences.",
+    "We made a decision and a plan.",
+    "We made a decision to the contrary.",
+    "At the present time and place we stop.",
+    "We made a decision to leave and a plan to return.",
+    "We made a decision to leave rather than a plan to stay.",
+    "We reached a conclusion before noon and a deal after lunch.",
+    "We meet on a daily basis until June and a weekly basis after.",
+    "We made a decision, a bold one.",
+    "We made a decision, and a plan.",
+    "Making a decision, we found it hard.",
+];
+
+#[test]
+fn slp001_guard_drops_unprovable_contexts() {
+    for src in GUARD_COUNTER_CONTEXTS {
+        assert!(findings(1, &parse(src)).is_empty(), "{src:?}");
+        assert_eq!(apply_fixes(1, src), *src, "{src:?}");
+    }
+}
+
+#[test]
+fn slp001_every_row_in_positive() {
+    let src = read(1, "positive.md");
+    let found = findings(1, &parse(&src));
+    let module = include_str!("../src/rules/builtin/slp001_ai_vocabulary_replaceable.rs");
+    let table = module
+        .split("static ENTRIES:")
+        .nth(1)
+        .unwrap()
+        .split("];")
+        .next()
+        .unwrap();
+    let phrases: Vec<&str> = table
+        .lines()
+        .filter_map(|line| {
+            line.trim()
+                .strip_prefix("(\"")
+                .and_then(|rest| rest.split('\"').next())
+        })
+        .collect();
+    assert_eq!(phrases.len(), 82);
+    assert_eq!(found.len(), phrases.len());
+    for phrase in phrases {
+        let count = found
+            .iter()
+            .filter(|f| src[f.range.clone()].eq_ignore_ascii_case(phrase))
+            .count();
+        assert_eq!(count, 1, "{phrase}");
     }
 }
 
@@ -554,4 +634,40 @@ fn metric_rule_silent_when_unavailable() {
     let prose = sloperator::text::Prose::new(&doc);
     assert_eq!(prose.counts(&doc).sentences, 3);
     assert!(findings(18, &doc).is_empty());
+}
+
+#[test]
+fn slp022_reports_all_twelve_intensifiers_without_fixes() {
+    let doc = parse(&read(22, "positive.md"));
+    let found = findings(22, &doc);
+    let mut words: Vec<_> = found
+        .iter()
+        .map(|f| doc.src[f.range.clone()].to_lowercase())
+        .collect();
+    words.sort();
+    assert_eq!(
+        words,
+        [
+            "absolutely",
+            "actually",
+            "basically",
+            "extremely",
+            "highly",
+            "incredibly",
+            "literally",
+            "quite",
+            "really",
+            "totally",
+            "truly",
+            "very"
+        ]
+    );
+    for f in found {
+        let word = &doc.src[f.range.clone()];
+        assert_eq!(
+            f.message,
+            format!("`{word}` adds emphasis, not meaning; consider deleting it")
+        );
+        assert!(f.fix.is_none());
+    }
 }

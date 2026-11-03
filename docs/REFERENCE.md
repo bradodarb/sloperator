@@ -175,10 +175,34 @@ MCP `explain_rule` includes `min` and `max`, with `null` for an unbounded maximu
   (SLP900 and above) is never suppressed.
 - `Registry::builtin()` is built once. `get(code)` and `default_set()` query it. System codes SLP901 and SLP902 are
   not rules and are never in it.
-- The catalogue has 21 rules across ten populated families. The original SLP001–SLP017 remain on by default
+- The catalogue has 22 rules across eleven populated families. The original SLP001–SLP017 remain on by default
   with `since = "0.1.0"`; SLP018–SLP021 are opt-in Readability rules with `since = "0.2.0"`. `tests/rules_registry.rs` pins this: `default_set_is_explicit` compares `default_set()` with a
   literal list, so changing the defaults shows up as a test diff, and `new_rules_start_off` fails when a rule whose
   `since` is newer than 0.1.0 is `default_on` (FR-4.5).
+
+SLP001 `ai-vocabulary-replaceable` remains a default-on warning in AiVocabulary with safe fixes, and now also
+covers generic wordiness and nominalisations. Inflected rows include “make a decision” → “decide”,
+“reach a conclusion” → “conclude”, “take into consideration/account” and “give consideration to” → “consider”,
+“conduct/perform an analysis of” → “analyze”, “conduct an investigation into” → “investigate”,
+“provide assistance to” → “help”, “make an attempt to” → “try to”, “have a tendency to” → “tend to”,
+and “be in agreement with” → “agree with”. Padded phrases include “due to/owing to/in light of the fact that”
+→ “because”, “despite/in spite of the fact that” → “although”, “at this point in time/at the present time”
+→ “now”, “in the near future” → “soon”, “on a daily/regular basis” → “daily/regularly”,
+“until such time as” → “until”, “prior to” → “before”, “for the purpose of” → “for”,
+“with the exception of” → “except”, and “in close proximity to” → “near”.
+
+Noun-final rows fire only in closed, proven contexts: at sentence end, with one allowed complement word plus
+one terminal word, or for fronted adverbial rows followed by a comma and subject pronoun. Relative clauses,
+coordinations and noun modifiers such as “a decision tree” are left alone. “The fact that” rows reject a preceding
+form of “be”. SLP001's new default-on rows can change default findings, scores and safe fixes.
+
+| Code | Name | Family | Severity | Fix | Default | Detects |
+|------|------|--------|----------|-----|---------|---------|
+| SLP022 | `weak-intensifier` | Wordiness | suggestion | none | off | absolutely, actually, basically, extremely, highly, incredibly, literally, quite, really, totally, truly, very |
+
+SLP022 has no params and is available since 0.2.0. Enable it with `extend_select = ["SLP022"]` and
+`min_severity = "suggestion"`. It reports emphasis without deleting it: removal changes strength, which the
+verifier does not check. No automatic fix or model window is selected.
 
 The four Readability rules are suggestions with fix class `None`, default-off and detection-only: they never
 select a model window. Each reports once on the first paragraph's prose and adds suggestion weight 1 when

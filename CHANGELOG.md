@@ -2,6 +2,14 @@
 
 ## 0.2.0 (unreleased)
 
+- SLP001 `ai-vocabulary-replaceable` now also covers inflected nominalisations and padded phrases, including
+  “make a decision” → “decide”, “conduct an analysis of” → “analyze”, and “at this point in time” → “now”.
+  These rows remain default-on warnings with safe fixes, so default output gains findings, scores and fixes
+  on padded phrasing. Noun-final and “the fact that” guards keep unproven grammatical contexts unchanged.
+- Added SLP022 `weak-intensifier`: Wordiness, suggestion severity, fix class `None`, default-off, since 0.2.0,
+  no params. It flags twelve intensifiers without deleting them because verification does not check strength.
+- Phase-2 model reliance: 19.56 residual model-eligible findings per 1,000 words (baseline 19.56), measured
+  2026-11-02 without a model or network; see `eval/model-reliance.md`.
 - Added four opt-in Readability rules, all suggestion severity, fix class `None`, default-off, since 0.2.0:
   SLP018 `grade-level` (`max_grade = 12`, bounds 0–30);
   SLP019 `sentence-length-variation` (`min_cv = 0.35`, bounds 0–5);

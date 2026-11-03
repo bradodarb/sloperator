@@ -106,7 +106,7 @@ fn rules_only_100kb_under_1s() {
     fs::write(
         tmp.path().join("sloperator.toml"),
         format!(
-            "respect_gitignore = false\nextend_select = [\"SLP018\", \"SLP019\", \"SLP020\", \"SLP021\"]\n\n[model]\ncache_dir = {}\n",
+            "respect_gitignore = false\nextend_select = [\"SLP018\", \"SLP019\", \"SLP020\", \"SLP021\", \"SLP022\"]\n\n[model]\ncache_dir = {}\n",
             toml_path(&cache)
         ),
     )

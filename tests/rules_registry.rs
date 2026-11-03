@@ -21,7 +21,7 @@ fn at_least_15_rules_covering_nine_families() {
     let codes: BTreeSet<RuleCode> = reg.all().map(|r| r.meta().code).collect();
     assert_eq!(codes.len(), reg.all().count(), "duplicate rule codes");
     assert!(codes.len() >= 15, "{} rules", codes.len());
-    assert_eq!(codes.len(), 21, "the catalogue includes SLP018–SLP021");
+    assert_eq!(codes.len(), 22, "the catalogue includes SLP022");
     let families = [
         Family::AiVocabulary,
         Family::NegativeParallelism,
@@ -69,6 +69,7 @@ fn every_rule_has_code_name_severity_state_fix() {
         (19, (Suggestion, NoFix)),
         (20, (Suggestion, NoFix)),
         (21, (Suggestion, NoFix)),
+        (22, (Suggestion, NoFix)),
     ]
     .into_iter()
     .collect();
@@ -225,4 +226,20 @@ fn metric_rules_explain_provisional() {
         .explain;
     assert!(explain.contains("sentence-length variation"));
     assert!(explain.contains("not perplexity-based burstiness"));
+}
+
+#[test]
+fn slp022_is_detection_only() {
+    let meta = Registry::builtin()
+        .get(RuleCode(22))
+        .expect("SLP022 registered")
+        .meta();
+    assert_eq!(meta.name, "weak-intensifier");
+    assert_eq!(meta.family, Family::Wordiness);
+    assert_eq!(meta.severity, Severity::Suggestion);
+    assert_eq!(meta.fix, FixClass::None);
+    assert!(!meta.default_on);
+    assert_eq!(meta.since, "0.2.0");
+    assert!(meta.params.is_empty());
+    assert!(meta.explain.contains("verifier does not check strength"));
 }
