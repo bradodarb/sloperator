@@ -12,8 +12,8 @@ agent decides whether to apply a fix.
 
 | Tool | Input | Output |
 |------|-------|--------|
-| `lint` | `text`, `path?` | `findings` (code, name, severity, line, col, endLine, endCol, message, matched) and `score` |
-| `fix` | `text`, `path?`, `rules_only?` (default `false`) | `fixed`, `changed`, `diff` (unified), remaining `findings`, `rejections` (SLP901/SLP902), `scoreBefore`, `scoreAfter`, `engines` |
+| `lint` | `text`, `path?` | `findings` (code, name, severity, line, col, endLine, endCol, message, matched) and `score`, `metrics` |
+| `fix` | `text`, `path?`, `rules_only?` (default `false`) | `fixed`, `changed`, `diff` (unified), remaining `findings`, `rejections` (SLP901/SLP902), `scoreBefore`, `scoreAfter`, `metricsBefore`, `metricsAfter`, `engines` |
 | `rules` | none | `ruleSetVersion` and `rules` (code, name, severity, defaultOn, fix class) |
 | `explain_rule` | `code` | the rule's explanation, `params` and a before/after `example` |
 
@@ -31,7 +31,9 @@ message.
   {"code": "SLP001", "name": "ai-vocabulary-replaceable", "severity": "warning", "line": 1, "col": 33,
    "endLine": 1, "endCol": 43, "matched": "delve into",
    "message": "`delve into` is padded wording; use `look at`"}],
- "score": {"value": 545.45, "proseWords": 11, "weighted": 6}}
+ "score": {"value": 545.45, "proseWords": 11, "weighted": 6},
+ "metrics": {"words": 11, "sentences": 1, "avgSentenceLength": null, "gradeLevel": null,
+   "sentenceLengthSd": null, "sentenceLengthCv": null, "typeTokenRatio": null}}
 ```
 
 `fix` with `{"text": "It is important to note that this is great.\n", "path": "notes.md", "rules_only": true}`:
@@ -41,8 +43,17 @@ message.
  "diff": "--- a/notes.md\n+++ b/notes.md\n@@ -1 +1 @@\n-It is important to note that this is great.\n+This is great.\n",
  "findings": [], "rejections": [], "engines": {"rules": true, "model": false},
  "scoreBefore": {"value": 333.33, "proseWords": 9, "weighted": 3},
- "scoreAfter": {"value": 0.0, "proseWords": 3, "weighted": 0}}
+ "scoreAfter": {"value": 0.0, "proseWords": 3, "weighted": 0},
+ "metricsBefore": {"words": 9, "sentences": 1, "avgSentenceLength": null, "gradeLevel": null,
+   "sentenceLengthSd": null, "sentenceLengthCv": null, "typeTokenRatio": null},
+ "metricsAfter": {"words": 3, "sentences": 1, "avgSentenceLength": null, "gradeLevel": null,
+   "sentenceLengthSd": null, "sentenceLengthCv": null, "typeTokenRatio": null}}
 ```
+
+Metrics count paragraph prose only and use the settings resolved for the supplied `path`. Derived values are
+`null` below either `[metrics]` sample floor (defaults: 5 sentences, 100 words); word and sentence counts remain
+available. Fix metrics describe the original and the surviving final text. Formulas and limits are in
+[Text metrics](REFERENCE.md#text-metrics).
 
 A model rewrite can pass every verification check and still flatten a deliberate voice. The `fix` description
 tells the agent to show the user the diff before applying it.

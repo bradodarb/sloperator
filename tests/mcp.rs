@@ -407,3 +407,83 @@ fn real_model_fix_through_the_server_loads_once() {
     );
     server.shutdown();
 }
+
+#[test]
+fn lint_has_metrics() {
+    let dir = tempfile::tempdir().unwrap();
+    let server = rules_only_server(dir.path());
+    let text = "The cat watched the dog and the bird beside the old tree near the quiet house all morning long. ".repeat(6);
+    let (err, v) = call(&server, "lint", json!({ "text": text, "path": "doc.md" }));
+    assert!(!err, "{v}");
+    let m = &v["metrics"];
+    assert_eq!(m["sentences"], 6);
+    assert_eq!(m["words"], 114);
+    for key in [
+        "avgSentenceLength",
+        "gradeLevel",
+        "sentenceLengthSd",
+        "sentenceLengthCv",
+        "typeTokenRatio",
+    ] {
+        assert!(m[key].is_number(), "{key}: {m}");
+    }
+    let (err, v) = call(
+        &server,
+        "lint",
+        json!({ "text": "Cat dog.", "path": "doc.md" }),
+    );
+    assert!(!err, "{v}");
+    assert_eq!(v["metrics"]["words"], 2);
+    assert!(v["metrics"]["gradeLevel"].is_null());
+    fs::create_dir(dir.path().join("sub")).unwrap();
+    fs::write(
+        dir.path().join("sub/sloperator.toml"),
+        "[metrics]\nmin_sentences = 10\n",
+    )
+    .unwrap();
+    let (err, v) = call(
+        &server,
+        "lint",
+        json!({ "text": text, "path": "sub/doc.md" }),
+    );
+    assert!(!err, "{v}");
+    assert_eq!(v["metrics"]["sentences"], 6);
+    assert!(v["metrics"]["avgSentenceLength"].is_null(), "{v}");
+}
+
+#[test]
+fn fix_has_metrics_before_and_after() {
+    let dir = tempfile::tempdir().unwrap();
+    let server = rules_only_server(dir.path());
+    let text = "We utilize the cache in order to look things up.\n".repeat(15);
+    let (err, v) = call(
+        &server,
+        "fix",
+        json!({ "text": text, "path": "doc.md", "rules_only": true }),
+    );
+    assert!(!err, "{v}");
+    assert_eq!(v["changed"], true);
+    assert_eq!(v["metricsBefore"]["words"], 150);
+    assert_eq!(v["metricsAfter"]["words"], 120);
+    for field in ["metricsBefore", "metricsAfter"] {
+        assert_eq!(v[field]["sentences"], 15);
+        for key in [
+            "avgSentenceLength",
+            "gradeLevel",
+            "sentenceLengthSd",
+            "sentenceLengthCv",
+            "typeTokenRatio",
+        ] {
+            assert!(v[field][key].is_number(), "{field}.{key}: {v}");
+        }
+    }
+    let (err, v) = call(
+        &server,
+        "fix",
+        json!({ "text": "Cat dog.", "rules_only": true }),
+    );
+    assert!(!err, "{v}");
+    assert_eq!(v["changed"], false);
+    assert_eq!(v["metricsBefore"], v["metricsAfter"]);
+    assert!(v["metricsAfter"]["gradeLevel"].is_null());
+}
