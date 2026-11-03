@@ -159,7 +159,7 @@ fn plan(
         .collect();
     let prefixes: Vec<&str> = line_starts
         .iter()
-        .map(|&ls| &doc.src[ls..ls + mask::prefix_len(doc, ls, range.end)])
+        .map(|&ls| &doc.src[ls..ls + doc.continuation_prefix_len(ls, range.end)])
         .collect();
     if prefixes.windows(2).any(|p| p[0] != p[1]) {
         return skip(format!(
@@ -217,7 +217,7 @@ fn measure(
     let src = &*doc.src;
     let block_start = doc.blocks[block.0 as usize].range.start;
     let first_line = src[..range.start].rfind('\n').map_or(0, |i| i + 1);
-    let content0 = (first_line + mask::prefix_len(doc, first_line, range.end)).max(block_start);
+    let content0 = (first_line + doc.continuation_prefix_len(first_line, range.end)).max(block_start);
     let indent = src[content0.min(range.start)..range.start].chars().count();
     let line_width = |from: usize| {
         let end = src[from..].find('\n').map_or(src.len(), |i| from + i);
@@ -227,7 +227,7 @@ fn measure(
         .chain(
             line_starts
                 .iter()
-                .map(|&ls| line_width(ls + mask::prefix_len(doc, ls, range.end))),
+                .map(|&ls| line_width(ls + doc.continuation_prefix_len(ls, range.end))),
         )
         .max()
         .unwrap_or(0);
@@ -247,7 +247,7 @@ fn sentence_range(doc: &Document, block: BlockId, r: &Range<usize>) -> Range<usi
     for (i, _) in doc.src[b.clone()].match_indices('\n') {
         let ls = b.start + i + 1;
         if ls < b.end {
-            let p = mask::prefix_len(doc, ls, b.end);
+            let p = doc.continuation_prefix_len(ls, b.end);
             scan[ls - b.start..ls - b.start + p].fill(b' ');
         }
     }
