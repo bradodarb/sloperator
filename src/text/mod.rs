@@ -3,6 +3,9 @@
 //! `lexicon` provides compiled closed word lists and contraction-aware negation/modal helpers (SPEC §22).
 //! SLP006 shares its modal list; `to` remains a separate infinitive guard in the rule.
 //!
+//! `tagger::tag` tags cached words using owned tables and contextual rules. Only unchanged single-tag
+//! lexicon entries are certain; ambiguous and unknown words cannot authorize safe fixes.
+//!
 //! Build one owned `Prose` per document pass. Segmentation eagerly caches each block's sentence bounds and
 //! every prose word; consumers can query ranges without scanning again. Pair it with its original document.
 //! The pipeline builds it after directive extraction; rules and model windows share its cached segmentation.
@@ -21,9 +24,11 @@ pub mod lexicon;
 pub mod metrics;
 pub mod segment;
 pub mod syllable;
+pub mod tagger;
 
 pub use metrics::{Counts, Floors, Metrics};
 pub use segment::{Segments, Sentence, Word};
+pub use tagger::{Tag, Tagged};
 
 /// One document pass's owned analysis (ADR-02), paired with the document it was built from.
 pub struct Prose {
