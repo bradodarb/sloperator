@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.0 (unreleased)
+## 0.2.0 (2026-11-02)
 
 - Added SLP023 `redundant-sentence`: default-off Redundancy suggestion, detection only, since 0.2.0.
   It compares stemmed content-word counts within paragraphs with provisional `min_overlap = 0.6`
