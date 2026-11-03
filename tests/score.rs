@@ -107,7 +107,8 @@ fn reference_states_limits() {
     ));
     // PRD Risk 1.
     assert!(reference.contains(
-        "Verification covers numbers, URLs, configured terms, placeholders and block structure, \
-         not names or claim polarity."
+        "Verification covers numbers, URLs, configured terms, placeholders, block structure, negations, modal verbs and \
+         capitalised words as a proxy for names. It does not detect every change of meaning: a reworded claim with the same \
+         negations, modals and capitalised words passes."
     ));
 }

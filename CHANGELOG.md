@@ -2,6 +2,15 @@
 
 ## 0.2.0 (unreleased)
 
+- Verification now checks dropped negations, capitalised non-sentence-initial words as a proxy for names, and
+  modal-verb multisets (including normalised contractions). SLP901 names failures as `negation`, `properNouns`
+  or `modals`; rejected edits leave the original bytes intact.
+- D-8 permits one dropped negation for a rule-origin SLP003/SLP004 edit, or one per SLP003/SLP004 finding a model
+  window resolves, with duplicate findings counted. Other edits get no allowance. Only deterministic rule-origin
+  edits skip closed-list common capitalised words; model edits use the stricter name proxy.
+- SLP008 still reports “It should be noted that” but no longer attaches its safe deletion, which would remove
+  the modal “should”. Verification does not detect every change of meaning: a reworded claim with the same
+  negations, modals and capitalised words passes.
 - SLP001 `ai-vocabulary-replaceable` now also covers inflected nominalisations and padded phrases, including
   “make a decision” → “decide”, “conduct an analysis of” → “analyze”, and “at this point in time” → “now”.
   These rows remain default-on warnings with safe fixes, so default output gains findings, scores and fixes

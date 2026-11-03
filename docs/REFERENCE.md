@@ -127,13 +127,18 @@ heading text, list-item text, table-cell text and quote text are prose.
 
 ## Edit gate (`verify`)
 
-Every edit goes through `verify::edit(doc, proposal, frozen, protect)`, which returns `Verified<Proposal>` or a
+Every edit goes through `verify::edit(doc, proposal, frozen, protect, resolves)`, which returns `Verified<Proposal>` or a
 `Rejection { range, failed: Check, detail }`. Only `verify` can build a `Verified` (private constructor, ADR-05).
 A rejection is reported, never written: the pipeline turns it into SLP901 (see Pipeline below).
 
 - Numbers (`42`, `1,000.5`, `42%`), digit dates (`2024-01-05`), URLs and configured `terms` are compared as
   multisets between the replaced bytes and the replacement. A loss, addition or change is rejected
   (`Numbers`, `Urls`, `Terms`). Reordering is fine.
+- Meaning checks run after configured terms and before reparsing. `Negation` rejects a reduction beyond the
+  allowance: one for rule-origin SLP003/SLP004, or one per SLP003/SLP004 finding in a model window's `resolves`
+  list (duplicates count). Other origins have no allowance. `ProperNouns` preserves the multiset of capitalised,
+  non-sentence-initial words; only rule-origin edits skip closed-list common words. `Modals` preserves the modal
+  multiset, normalising contractions such as “won't” to “will”. Safe fixes pass an empty `resolves` list.
 - An edit overlapping a protected span or a frozen (suppressed) range, or outside the document, is `Protected`.
 - The document is re-parsed with the edit applied. A different block count is `NewBlockMarker` (a new heading or
   list), a different block kind or level is `BlockType`, and different protected bytes (a new fence, say) is
@@ -528,7 +533,9 @@ surviving final text. These additive fields keep `schemaVersion` at 1. Concise a
 The score measures style tells, not text quality or provenance. sloperator does not make text undetectable and
 makes no such claim.
 
-Verification covers numbers, URLs, configured terms, placeholders and block structure, not names or claim polarity.
+Verification covers numbers, URLs, configured terms, placeholders, block structure, negations, modal verbs and
+capitalised words as a proxy for names. It does not detect every change of meaning: a reworded claim with the same
+negations, modals and capitalised words passes.
 
 ## Model setup
 

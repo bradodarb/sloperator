@@ -2,7 +2,9 @@
 //! can build a [`Verified`], so an unverified byte is never written.
 //!
 //! A rejection is a finding, not an error: `pipeline` turns each [`Rejection`] into SLP901 and the original text
-//! stays. Verification covers numbers, URLs, terms and block structure, not names or claim polarity.
+//! stays. Verification covers numbers, URLs, configured terms, placeholders, block structure, negations, modal
+//! verbs and capitalised words as a proxy for names. It does not detect every change of meaning: a reworded claim
+//! with the same negations, modals and capitalised words passes.
 
 use std::ops::Range;
 use std::sync::Arc;

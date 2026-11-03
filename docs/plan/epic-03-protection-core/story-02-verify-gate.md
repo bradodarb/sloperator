@@ -47,6 +47,6 @@ Implement `src/verify/{mod,tokens}.rs`: `Verified<T>` with a private constructor
 
 ## Notes
 
-Verification covers numbers, URLs, terms, placeholders and block structure, not names or claim polarity (PRD Risk 1, architecture R8). R6 is accepted: a reparse difference rejects a fix, and that is reported, never written.
+Verification covers numbers, URLs, configured terms, placeholders, block structure, negations, modal verbs and capitalised words as a proxy for names. It does not detect every change of meaning: a reworded claim with the same negations, modals and capitalised words passes (PRD Risk 1, architecture R8; coverage updated by classical-nlp). R6 is accepted: a reparse difference rejects a fix, and that is reported, never written.
 
 Gate: `make test TESTS='sloperator::verify_edits'`
