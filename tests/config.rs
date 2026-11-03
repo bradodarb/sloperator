@@ -557,3 +557,48 @@ fn metrics_floors_run_root() {
         }
     );
 }
+
+#[test]
+fn rejects_negative_threshold() {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("sloperator.toml");
+    for (value, reason) in [
+        ("-1", "minimum is 0"),
+        ("nan", "NaN"),
+        ("inf", "maximum"),
+        ("-inf", "minimum"),
+    ] {
+        write(
+            &path,
+            &format!("[rules.SLP014]\nmax_per_1000_words = {value}\n"),
+        );
+        let (file, key, message) = config_error(&path);
+        assert_eq!(file, canon(&path));
+        assert_eq!(key, "rules.SLP014.max_per_1000_words");
+        assert!(message.contains(reason), "{message}");
+    }
+}
+
+#[test]
+fn existing_params_still_load() {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("sloperator.toml");
+    for value in [0.0, 1.0, f64::MAX] {
+        write(
+            &path,
+            &format!(
+                "[rules.SLP005]\nmax_per_1000_words = {value:?}\n[ rules.SLP010 ]\nmin_items = {value:?}\nmax_words = {value:?}\n[rules.SLP011]\nmax_per_100_words = {value:?}\n[rules.SLP014]\nmax_per_1000_words = {value:?}\n"
+            ),
+        );
+        let mut resolver = Resolver::new(CliOverrides::default(), Some(&path)).unwrap();
+        let settings = resolver.for_file(&tmp.path().join("doc.md")).unwrap();
+        for code in [5, 10, 11, 14] {
+            assert!(
+                settings.rules[&RuleCode(code)]
+                    .params
+                    .values()
+                    .all(|v| *v == value)
+            );
+        }
+    }
+}

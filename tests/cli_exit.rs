@@ -304,3 +304,13 @@ fn slp901_survives_min_severity_and_exit_zero() {
         "the original is kept"
     );
 }
+
+#[test]
+fn rules_explain_shows_param_bounds() {
+    let (code, out, err) = run_cli(&["rules", "SLP014"], "");
+    assert_eq!(code, ExitCode::Clean, "stderr: {err}");
+    assert!(
+        out.contains("Em dashes per 1,000 prose words above which every dash is reported (min 0)"),
+        "{out}"
+    );
+}

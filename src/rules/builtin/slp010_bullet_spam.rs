@@ -43,11 +43,15 @@ pub(super) fn rule() -> Box<dyn Rule> {
                 ParamSpec {
                     name: MIN_ITEMS,
                     default: 5.0,
+                    min: 0.0,
+                    max: f64::MAX,
                     help: "Fewest items a list needs before it can be reported",
                 },
                 ParamSpec {
                     name: MAX_WORDS,
                     default: 6.0,
+                    min: 0.0,
+                    max: f64::MAX,
                     help: "Most words an item may have and still count as a fragment",
                 },
             ],

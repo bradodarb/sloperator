@@ -63,6 +63,10 @@ pub enum Family {
 pub struct ParamSpec {
     pub name: &'static str,
     pub default: f64,
+    /// Inclusive minimum accepted by config.
+    pub min: f64,
+    /// Inclusive maximum; `f64::MAX` denotes an unbounded upper limit.
+    pub max: f64,
     pub help: &'static str,
 }
 

@@ -38,6 +38,8 @@ pub(super) fn rule() -> Box<dyn Rule> {
             params: &[ParamSpec {
                 name: MAX_PER_1000_WORDS,
                 default: 3.0,
+                min: 0.0,
+                max: f64::MAX,
                 help: "Em dashes per 1,000 prose words above which every dash is reported",
             }],
             since: "0.1.0",

@@ -487,3 +487,18 @@ fn fix_has_metrics_before_and_after() {
     assert_eq!(v["metricsBefore"], v["metricsAfter"]);
     assert!(v["metricsAfter"]["gradeLevel"].is_null());
 }
+
+#[test]
+fn explain_rule_has_param_bounds() {
+    let dir = tempfile::tempdir().unwrap();
+    let (err, v) = call(
+        &rules_only_server(dir.path()),
+        "explain_rule",
+        json!({ "code": "SLP014" }),
+    );
+    assert!(!err, "{v}");
+    let param = &v["params"][0];
+    assert_eq!(param["name"], "max_per_1000_words");
+    assert_eq!(param["min"], json!(0.0));
+    assert_eq!(param.get("max"), Some(&Value::Null));
+}

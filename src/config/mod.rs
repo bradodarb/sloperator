@@ -547,6 +547,15 @@ fn rule_tables(
                     ));
                 }
             };
+            if n.is_nan() {
+                return Err(config_err(file, &k, "expected a number that is not NaN"));
+            }
+            if n < spec.min {
+                return Err(config_err(file, &k, &format!("minimum is {}", spec.min)));
+            }
+            if n > spec.max {
+                return Err(config_err(file, &k, &format!("maximum is {}", spec.max)));
+            }
             o.params.insert(spec.name, n);
         }
         out.insert(c, o);

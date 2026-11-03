@@ -39,6 +39,8 @@ pub(super) fn rule() -> Box<dyn Rule> {
             params: &[ParamSpec {
                 name: MAX_PER_100_WORDS,
                 default: 2.0,
+                min: 0.0,
+                max: f64::MAX,
                 help: "Strong spans per 100 prose words in one block above which each is reported",
             }],
             since: "0.1.0",

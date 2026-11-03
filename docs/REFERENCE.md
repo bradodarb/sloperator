@@ -162,7 +162,11 @@ A rejection is reported, never written: the pipeline turns it into SLP901 (see P
 
 `rules` holds the `Rule` trait (`meta()` and `check(&RuleCtx, &mut Vec<Finding>)`), the metadata types (`Severity`,
 `FixClass`, `Family`, `ParamSpec`, `RuleMeta`), `Finding`, `Enabled` (a rule with its resolved severity and params)
-and the `Registry`. `rules::RuleCode` and `rules::Proposal` are re-exports from `types`. `rules` never uses
+and the `Registry`. Each `ParamSpec` declares inclusive `min` and `max` bounds; `f64::MAX` denotes an unbounded
+upper limit. Config rejects NaN and values outside these bounds, naming the rule and parameter. Existing count
+and rate parameters accept `0..=f64::MAX`. `rules CODE` prints the bounds after each parameter's help;
+MCP `explain_rule` includes `min` and `max`, with `null` for an unbounded maximum.
+`rules::RuleCode` and `rules::Proposal` are re-exports from `types`. `rules` never uses
 `edit`; a fix is a `types::Proposal`. The built-in list is `rules::builtin::all()`; each rule story adds one file
 `src/rules/builtin/slpNNN_<name>.rs` and one line there.
 

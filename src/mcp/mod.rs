@@ -259,6 +259,7 @@ fn explain_json(args: &JsonObject) -> Result<Value, String> {
         "explain": m.explain,
         "params": m.params.iter().map(|p| json!({
             "name": p.name, "default": p.default, "help": p.help,
+            "min": p.min, "max": if p.max == f64::MAX { None } else { Some(p.max) },
         })).collect::<Vec<_>>(),
         "example": { "before": m.example.0, "after": m.example.1 },
     }))

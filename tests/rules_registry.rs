@@ -154,3 +154,20 @@ fn version(v: &str) -> (u32, u32, u32) {
         _ => panic!("bad version {v:?}"),
     }
 }
+
+#[test]
+fn param_defaults_within_bounds() {
+    for rule in Registry::builtin().all() {
+        for param in rule.meta().params {
+            assert!(
+                param.min <= param.default && param.default <= param.max,
+                "{}.{} default {} outside {}..={}",
+                rule.meta().code,
+                param.name,
+                param.default,
+                param.min,
+                param.max
+            );
+        }
+    }
+}
