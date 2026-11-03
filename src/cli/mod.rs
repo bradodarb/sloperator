@@ -318,7 +318,15 @@ fn show_rules(code: Option<&str>, out: &mut dyn Write) -> Result<ExitCode, Error
             if !m.params.is_empty() {
                 s.push_str("\nparameters:\n");
                 for p in m.params {
-                    s.push_str(&format!("  {} = {}  {}\n", p.name, p.default, p.help));
+                    let bounds = if p.max == f64::MAX {
+                        format!("(min {})", p.min)
+                    } else {
+                        format!("(min {}, max {})", p.min, p.max)
+                    };
+                    s.push_str(&format!(
+                        "  {} = {}  {} {}\n",
+                        p.name, p.default, p.help, bounds
+                    ));
                 }
             }
             s.push_str(&format!(

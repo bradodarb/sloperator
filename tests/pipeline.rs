@@ -348,3 +348,35 @@ fn whole_document_rejection_keeps_original_metrics() {
     assert_eq!(r.metrics_before, Some(expected.clone()));
     assert_eq!(r.metrics, expected);
 }
+
+#[test]
+fn enabling_metric_rule_adds_suggestion_weight() {
+    let tmp = tempfile::tempdir().unwrap();
+    let text = std::fs::read_to_string(common::fixture("rules/SLP018/positive.md")).unwrap();
+    let src = source(tmp.path(), &text);
+    let path = tmp.path().join("doc.md");
+    let mut baseline = src.clone();
+    Arc::make_mut(&mut baseline.settings).min_severity = Severity::Suggestion;
+    let before = pipeline::lint(pipeline::analyse(baseline).unwrap());
+    let mut resolver = Resolver::new(
+        CliOverrides {
+            extend_select: vec!["SLP018".into()],
+            min_severity: Some(Severity::Suggestion),
+            ..CliOverrides::default()
+        },
+        None,
+    )
+    .unwrap();
+    let settings = resolver.for_file(&path).unwrap();
+    let after = pipeline::lint(pipeline::analyse(Source { settings, ..src }).unwrap());
+    assert_eq!(
+        after
+            .findings
+            .iter()
+            .filter(|l| l.finding.code == RuleCode(18))
+            .count(),
+        1
+    );
+    assert_eq!(after.score.weighted, before.score.weighted + 1);
+    assert_eq!(after.score.prose_words, before.score.prose_words);
+}

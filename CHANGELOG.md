@@ -2,6 +2,16 @@
 
 ## 0.2.0 (unreleased)
 
+- Added four opt-in Readability rules, all suggestion severity, fix class `None`, default-off, since 0.2.0:
+  SLP018 `grade-level` (`max_grade = 12`, bounds 0–30);
+  SLP019 `sentence-length-variation` (`min_cv = 0.35`, bounds 0–5);
+  SLP020 `long-sentences` (`max_avg_words = 25`, bounds 1–1000);
+  SLP021 `lexical-diversity` (`min_ttr = 0.4`, bounds 0–1). Thresholds are provisional.
+- Every numeric `ParamSpec` now declares inclusive minimum/maximum bounds, validated by config and shown by
+  CLI/MCP explanations. Existing parameters retain their nonnegative bounds.
+- Metric rules share `min_sentences` / `min_words` (defaults 5/100, static minimum 1). Unset values inherit
+  `[metrics]` report floors after resolution; explicit values below those floors are rejected. These rules
+  add suggestion weight 1 when reported and never select model windows. SLP001–SLP017 defaults are unchanged.
 - Text reports show paragraph reading metrics, original metrics for Fix/Diff, and overall metrics from merged counts.
 - JSON adds `files[].metrics`, `files[].metricsBefore` and `summary.metrics`; `schemaVersion` remains 1 and score keys are unchanged.
 - `[metrics] min_sentences` and `min_words` configure positive sample floors (defaults 5/100). Unavailable values are JSON `null`; text explains the configured floors.

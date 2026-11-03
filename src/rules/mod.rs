@@ -56,6 +56,9 @@ pub enum Family {
     Markup,
     ChatbotResidue,
     EmDash,
+    Readability,
+    Wordiness,
+    Redundancy,
 }
 
 /// One tunable threshold (e.g. SLP014 `max_per_1000_words`); config validates names and types against these (FR-7.6).
@@ -63,6 +66,10 @@ pub enum Family {
 pub struct ParamSpec {
     pub name: &'static str,
     pub default: f64,
+    /// Inclusive minimum accepted by config.
+    pub min: f64,
+    /// Inclusive maximum; `f64::MAX` denotes an unbounded upper limit.
+    pub max: f64,
     pub help: &'static str,
 }
 
@@ -145,7 +152,7 @@ pub trait Rule: Send + Sync {
 }
 
 /// The rule-set version (architecture §6): the crate version at which the default list last changed.
-pub const RULE_SET_VERSION: &str = "0.1.0";
+pub const RULE_SET_VERSION: &str = "0.2.0";
 
 /// A rule with its resolved severity and params for one file (built by `config::Settings::enabled`, SPEC §13).
 pub struct Enabled<'a> {

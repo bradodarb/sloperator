@@ -21,7 +21,7 @@ fn at_least_15_rules_covering_nine_families() {
     let codes: BTreeSet<RuleCode> = reg.all().map(|r| r.meta().code).collect();
     assert_eq!(codes.len(), reg.all().count(), "duplicate rule codes");
     assert!(codes.len() >= 15, "{} rules", codes.len());
-    assert_eq!(codes.len(), 17, "the v0.1.0 catalogue has 17 rules");
+    assert_eq!(codes.len(), 21, "the catalogue includes SLP018–SLP021");
     let families = [
         Family::AiVocabulary,
         Family::NegativeParallelism,
@@ -65,6 +65,10 @@ fn every_rule_has_code_name_severity_state_fix() {
         (15, (Error, Model)),
         (16, (Suggestion, Safe)),
         (17, (Warning, Safe)),
+        (18, (Suggestion, NoFix)),
+        (19, (Suggestion, NoFix)),
+        (20, (Suggestion, NoFix)),
+        (21, (Suggestion, NoFix)),
     ]
     .into_iter()
     .collect();
@@ -153,4 +157,72 @@ fn version(v: &str) -> (u32, u32, u32) {
         [a, b, c] => (a, b, c),
         _ => panic!("bad version {v:?}"),
     }
+}
+
+#[test]
+fn param_defaults_within_bounds() {
+    for rule in Registry::builtin().all() {
+        for param in rule.meta().params {
+            assert!(
+                param.min <= param.default && param.default <= param.max,
+                "{}.{} default {} outside {}..={}",
+                rule.meta().code,
+                param.name,
+                param.default,
+                param.min,
+                param.max
+            );
+        }
+    }
+}
+
+#[test]
+fn slp018_metadata_and_families() {
+    let meta = Registry::builtin()
+        .get(RuleCode(18))
+        .expect("SLP018 registered")
+        .meta();
+    assert_eq!(meta.family, Family::Readability);
+    assert_eq!(meta.severity, Severity::Suggestion);
+    assert_eq!(meta.fix, FixClass::None);
+    assert!(!meta.default_on);
+    assert_eq!(meta.since, "0.2.0");
+    assert!(meta.explain.contains("provisional"));
+    assert_eq!(Registry::builtin().version, "0.2.0");
+    for (family, expected) in [
+        (Family::Readability, "readability"),
+        (Family::Wordiness, "wordiness"),
+        (Family::Redundancy, "redundancy"),
+    ] {
+        assert_eq!(
+            serde_json::to_value(family).expect("family serializes"),
+            expected
+        );
+    }
+}
+
+#[test]
+fn metric_rules_explain_provisional() {
+    for code in 18..=21 {
+        let meta = Registry::builtin()
+            .get(RuleCode(code))
+            .expect("metric rule registered")
+            .meta();
+        assert!(meta.explain.contains("provisional"), "SLP{code}");
+        assert_eq!(meta.family, Family::Readability);
+        assert_eq!(meta.severity, Severity::Suggestion);
+        assert!(!meta.default_on);
+        assert_eq!(meta.fix, FixClass::None);
+        assert_eq!(meta.since, "0.2.0");
+        assert_eq!(meta.params.len(), 3);
+        assert_eq!(meta.params[1].name, "min_sentences");
+        assert_eq!(meta.params[2].name, "min_words");
+    }
+    let explain = Registry::builtin()
+        .get(RuleCode(19))
+        .expect("SLP019 registered")
+        .meta()
+        .explain;
+    assert!(explain.contains("sentence-length variation"));
+    assert!(explain.contains("not perplexity-based burstiness"));
 }

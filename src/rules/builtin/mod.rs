@@ -1,4 +1,6 @@
 //! The built-in rule catalogue (SPEC §10). Each rule story adds its file and one line to `all()`, in code order.
+//! SLP018–SLP021 share cached paragraph metrics and configured sample floors; all are provisional, default-off
+//! suggestions with no fix or model window.
 
 use super::Rule;
 
@@ -19,6 +21,10 @@ mod slp014_em_dash_density;
 mod slp015_ai_disclaimer;
 mod slp016_summary_signpost;
 mod slp017_decorative_emoji;
+mod slp018_grade_level;
+mod slp019_sentence_length_variation;
+mod slp020_long_sentences;
+mod slp021_lexical_diversity;
 
 pub fn all() -> Vec<Box<dyn Rule>> {
     vec![
@@ -39,5 +45,9 @@ pub fn all() -> Vec<Box<dyn Rule>> {
         slp015_ai_disclaimer::rule(),
         slp016_summary_signpost::rule(),
         slp017_decorative_emoji::rule(),
+        slp018_grade_level::rule(),
+        slp019_sentence_length_variation::rule(),
+        slp020_long_sentences::rule(),
+        slp021_lexical_diversity::rule(),
     ]
 }

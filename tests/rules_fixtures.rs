@@ -198,6 +198,10 @@ rule_fixtures!(
         slp017_negative_silent,
         slp017_fix_matches
     ),
+    model(18, slp018_positive_fires, slp018_negative_silent),
+    model(19, slp019_positive_fires, slp019_negative_silent),
+    model(20, slp020_positive_fires, slp020_negative_silent),
+    model(21, slp021_positive_fires, slp021_negative_silent),
 );
 
 #[test]
@@ -539,4 +543,15 @@ fn fix_is_idempotent_over_all_fixtures() {
             );
         }
     }
+}
+
+#[test]
+fn metric_rule_silent_when_unavailable() {
+    let sentence = read(18, "positive.md");
+    let first = sentence.split('.').next().unwrap();
+    let text = format!("{first}. {first}. {first}.");
+    let doc = parse(&text);
+    let prose = sloperator::text::Prose::new(&doc);
+    assert_eq!(prose.counts(&doc).sentences, 3);
+    assert!(findings(18, &doc).is_empty());
 }
